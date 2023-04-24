@@ -1,7 +1,7 @@
 <template>
   <modals-modal v-model="show" :width="300" height="100%">
     <template #outer>
-      <div class="absolute top-5 left-4 z-40">
+      <div class="absolute top-8 left-4 z-40">
         <p class="text-white text-2xl truncate">Bookmarks</p>
       </div>
     </template>
@@ -46,6 +46,7 @@
 
 <script>
 import { Dialog } from '@capacitor/dialog'
+
 export default {
   props: {
     value: Boolean,
@@ -94,6 +95,7 @@ export default {
       this.showBookmarkTitleInput = true
     },
     async deleteBookmark(bm) {
+      await this.$hapticsImpact()
       const { value } = await Dialog.confirm({
         title: 'Remove Bookmark',
         message: `Are you sure you want to remove bookmark?`
@@ -111,7 +113,8 @@ export default {
         })
       this.show = false
     },
-    clickBookmark(bm) {
+    async clickBookmark(bm) {
+      await this.$hapticsImpact()
       this.$emit('select', bm)
     },
     submitUpdateBookmark(updatedBookmark) {
@@ -155,7 +158,8 @@ export default {
       this.newBookmarkTitle = this.$formatDate(Date.now(), 'MMM dd, yyyy HH:mm')
       this.showBookmarkTitleInput = true
     },
-    submitBookmark() {
+    async submitBookmark() {
+      await this.$hapticsImpact()
       if (this.selectedBookmark) {
         var updatePayload = {
           ...this.selectedBookmark,

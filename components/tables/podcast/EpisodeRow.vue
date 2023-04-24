@@ -1,5 +1,5 @@
 <template>
-  <div class="w-full px-0 py-4 overflow-hidden relative border-b border-white border-opacity-10">
+  <div class="w-full py-4 overflow-hidden relative border-b border-white border-opacity-10" @click.stop="goToEpisodePage">
     <div v-if="episode" class="w-full px-1">
       <!-- Help debug for testing -->
       <!-- <template>
@@ -16,22 +16,33 @@
       <p class="text-sm font-semibold">
         {{ title }}
       </p>
-      <p class="text-sm text-gray-200 episode-subtitle mt-1.5 mb-0.5 default-style" v-html="description" />
+
+      <p class="text-sm text-gray-200 line-clamp-2 mt-1.5 mb-0.5">{{ subtitle }}</p>
 
       <div class="flex items-center pt-2">
-        <div class="h-8 px-4 border border-white border-opacity-20 hover:bg-white hover:bg-opacity-10 rounded-full flex items-center justify-center cursor-pointer" :class="userIsFinished ? 'text-white text-opacity-40' : ''" @click="playClick">
+        <div class="h-8 px-4 border border-white border-opacity-20 hover:bg-white hover:bg-opacity-10 rounded-full flex items-center justify-center cursor-pointer" :class="userIsFinished ? 'text-white text-opacity-40' : ''" @click.stop="playClick">
           <span class="material-icons" :class="streamIsPlaying ? '' : 'text-success'">{{ streamIsPlaying ? 'pause' : 'play_arrow' }}</span>
           <p class="pl-2 pr-1 text-sm font-semibold">{{ timeRemaining }}</p>
         </div>
 
         <ui-read-icon-btn :disabled="isProcessingReadUpdate" :is-read="userIsFinished" borderless class="mx-1 mt-0.5" @click="toggleFinished" />
 
+        <button v-if="!isLocal" class="mx-1.5 mt-1.5" @click.stop="addToPlaylist">
+          <span class="material-icons text-2xl">playlist_add</span>
+        </button>
+
         <div v-if="userCanDownload">
           <span v-if="isLocal" class="material-icons-outlined px-2 text-success text-lg">audio_file</span>
-          <span v-else-if="!localEpisode" class="material-icons mx-1 mt-2" :class="downloadItem ? 'animate-bounce text-warning text-opacity-75 text-xl' : 'text-gray-300 text-xl'" @click="downloadClick">{{ downloadItem ? 'downloading' : 'download' }}</span>
+          <span v-else-if="!localEpisode" class="material-icons mx-1.5 mt-2 text-xl" :class="downloadItem ? 'animate-bounce text-warning text-opacity-75' : ''" @click.stop="downloadClick">{{ downloadItem ? 'downloading' : 'download' }}</span>
           <span v-else class="material-icons px-2 text-success text-xl">download_done</span>
         </div>
+
+        <div class="flex-grow" />
       </div>
+    </div>
+
+    <div v-if="processing" class="absolute top-0 left-0 w-full h-full bg-black bg-opacity-30 flex items-center justify-center">
+      <widgets-loading-spinner size="la-lg" />
     </div>
 
     <div v-if="!userIsFinished" class="absolute bottom-0 left-0 h-0.5 bg-warning" :style="{ width: itemProgressPercent * 100 + '%' }" />
@@ -58,7 +69,8 @@ export default {
   },
   data() {
     return {
-      isProcessingReadUpdate: false
+      isProcessingReadUpdate: false,
+      processing: false
     }
   },
   computed: {
@@ -77,10 +89,8 @@ export default {
     title() {
       return this.episode.title || ''
     },
-    description() {
-      if (this.episode.subtitle) return this.episode.subtitle
-      var desc = this.episode.description || ''
-      return desc
+    subtitle() {
+      return this.episode.subtitle || ''
     },
     duration() {
       return this.$secondsToTimestamp(this.episode.duration)
@@ -134,6 +144,12 @@ export default {
     }
   },
   methods: {
+    goToEpisodePage() {
+      this.$router.push(`/item/${this.libraryItemId}/${this.episode.id}`)
+    },
+    addToPlaylist() {
+      this.$emit('addToPlaylist', this.episode)
+    },
     async selectFolder() {
       var folderObj = await AbsFileSystem.selectFolder({ mediaType: this.mediaType })
       if (folderObj.error) {
@@ -141,8 +157,9 @@ export default {
       }
       return folderObj
     },
-    downloadClick() {
+    async downloadClick() {
       if (this.downloadItem) return
+      await this.$hapticsImpact()
       if (this.isIos) {
         // no local folders on iOS
         this.startDownload()
@@ -202,7 +219,8 @@ export default {
         this.$toast.error(errorMsg)
       }
     },
-    playClick() {
+    async playClick() {
+      await this.$hapticsImpact()
       if (this.streamIsPlaying) {
         this.$eventBus.$emit('pause-item')
       } else {
@@ -224,6 +242,7 @@ export default {
       }
     },
     async toggleFinished() {
+      await this.$hapticsImpact()
       this.isProcessingReadUpdate = true
       if (this.isLocal || this.localEpisode) {
         var isFinished = !this.userIsFinished

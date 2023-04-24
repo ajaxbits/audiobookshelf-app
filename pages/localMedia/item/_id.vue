@@ -1,8 +1,8 @@
 <template>
   <div class="w-full h-full py-6 px-2">
-    <div v-if="localLibraryItem" class="w-full h-full" :class="orderChanged ? 'pb-20' : ''">
+    <div v-if="localLibraryItem" class="w-full h-full">
       <div class="px-2 flex items-center mb-2">
-        <p class="text-base font-book font-semibold">{{ mediaMetadata.title }}</p>
+        <p class="text-basefont-semibold">{{ mediaMetadata.title }}</p>
         <div class="flex-grow" />
 
         <button v-if="audioTracks.length && !isPodcast" class="shadow-sm text-accent flex items-center justify-center rounded-full mx-2" @click.stop="play">
@@ -18,7 +18,7 @@
       <div v-if="isScanning" class="w-full text-center p-4">
         <p>Scanning...</p>
       </div>
-      <div v-else class="w-full max-w-full media-item-container overflow-y-auto overflow-x-hidden relative">
+      <div v-else class="w-full max-w-full media-item-container overflow-y-auto overflow-x-hidden relative" :class="{ 'media-order-changed': orderChanged }">
         <div v-if="!isPodcast" class="w-full">
           <p class="text-base mb-2">Audio Tracks ({{ audioTracks.length }})</p>
 
@@ -90,7 +90,7 @@
       <p class="text-lg text-center px-8">{{ failed ? 'Failed to get local library item ' + localLibraryItemId : 'Loading..' }}</p>
     </div>
 
-    <div v-if="orderChanged" class="fixed bottom-0 left-0 w-full py-4 px-4 bg-bg box-shadow-book flex items-center">
+    <div v-if="orderChanged" class="fixed left-0 w-full py-4 px-4 bg-bg box-shadow-book flex items-center" :style="{ bottom: playerLibraryItemId ? '120px' : '0px' }">
       <div class="flex-grow" />
       <ui-btn small color="success" @click="saveTrackOrder">Save Order</ui-btn>
     </div>
@@ -138,6 +138,9 @@ export default {
     }
   },
   computed: {
+    playerLibraryItemId() {
+      return this.$store.state.playerLibraryItemId
+    },
     isIos() {
       return this.$platform === 'ios'
     },
@@ -198,12 +201,12 @@ export default {
         ]
       } else {
         var options = []
-        if ( !this.isIos ) {
-          options.push({ text: 'Scan', value: 'scan'})
-          options.push({ text: 'Force Re-Scan', value: 'rescan'})
-          options.push({ text: 'Remove', value: 'remove'})
+        if (!this.isIos) {
+          options.push({ text: 'Scan', value: 'scan' })
+          options.push({ text: 'Force Re-Scan', value: 'rescan' })
+          options.push({ text: 'Remove', value: 'remove' })
         }
-        options.push({ text: 'Remove & Delete Files', value: 'delete'})
+        options.push({ text: 'Remove & Delete Files', value: 'delete' })
         return options
       }
     }
@@ -252,14 +255,16 @@ export default {
       }
       this.showDialog = true
     },
-    play() {
+    async play() {
+      await this.$hapticsImpact()
       this.$eventBus.$emit('play-item', { libraryItemId: this.localLibraryItemId })
     },
     getCapImageSrc(contentUrl) {
       return Capacitor.convertFileSrc(contentUrl)
     },
-    dialogAction(action) {
+    async dialogAction(action) {
       console.log('Dialog action', action)
+      await this.$hapticsImpact()
       if (action == 'scan') {
         this.scanItem()
       } else if (action == 'rescan') {
@@ -385,10 +390,22 @@ export default {
 }
 </script>
 
-<style>
+<style scoped>
 .media-item-container {
   height: calc(100vh - 200px);
   max-height: calc(100vh - 200px);
+}
+.media-item-container.media-order-changed {
+  height: calc(100vh - 280px);
+  max-height: calc(100vh - 280px);
+}
+.playerOpen .media-item-container {
+  height: calc(100vh - 300px);
+  max-height: calc(100vh - 300px);
+}
+.playerOpen .media-item-container.media-order-changed {
+  height: calc(100vh - 380px);
+  max-height: calc(100vh - 380px);
 }
 .sortable-ghost {
   opacity: 0.5;

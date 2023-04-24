@@ -1,9 +1,11 @@
 package com.audiobookshelf.app.data
 
+import android.content.Context
 import android.os.Bundle
 import android.support.v4.media.MediaDescriptionCompat
 import android.support.v4.media.MediaMetadataCompat
 import androidx.media.utils.MediaConstants
+import com.audiobookshelf.app.media.MediaManager
 import com.fasterxml.jackson.annotation.*
 
 // This auto-detects whether it is a Book or Podcast
@@ -50,7 +52,8 @@ class Podcast(
     // Add new episodes
     audioTracks.forEach { at ->
       if (episodes?.find{ it.audioTrack?.localFileId == at.localFileId } == null) {
-        val newEpisode = PodcastEpisode("local_ep_" + at.localFileId,episodes?.size ?: 0 + 1,null,null,at.title,null,null,null,at,at.duration,0, null)
+        val localEpisodeId = "local_ep_" + at.localFileId
+        val newEpisode = PodcastEpisode(localEpisodeId,(episodes?.size ?: 0) + 1,null,null,at.title,null,null,null, null, null, at,at.duration,0, null, localEpisodeId)
         episodes?.add(newEpisode)
       }
     }
@@ -63,7 +66,8 @@ class Podcast(
   }
   @JsonIgnore
   override fun addAudioTrack(audioTrack:AudioTrack) {
-    val newEpisode = PodcastEpisode("local_" + audioTrack.localFileId,(episodes?.size ?: 0) + 1,null,null,audioTrack.title,null,null,null,audioTrack,audioTrack.duration,0, null)
+    val localEpisodeId = "local_ep_" + audioTrack.localFileId
+    val newEpisode = PodcastEpisode(localEpisodeId,(episodes?.size ?: 0) + 1,null,null,audioTrack.title,null,null,null, null, null,audioTrack,audioTrack.duration,0, null, localEpisodeId)
     episodes?.add(newEpisode)
 
     var index = 1
@@ -82,9 +86,17 @@ class Podcast(
       index++
     }
   }
+
+  // Used for FolderScanner local podcast item to get copy of Podcast excluding episodes
+  @JsonIgnore
+  override fun getLocalCopy(): Podcast {
+    return Podcast(metadata as PodcastMetadata,coverPath,tags, mutableListOf(),autoDownloadEpisodes, 0)
+  }
+
   @JsonIgnore
   fun addEpisode(audioTrack:AudioTrack, episode:PodcastEpisode):PodcastEpisode {
-    val newEpisode = PodcastEpisode("local_" + episode.id,(episodes?.size ?: 0) + 1,episode.episode,episode.episodeType,episode.title,episode.subtitle,episode.description,null,audioTrack,audioTrack.duration,0, episode.id)
+    val localEpisodeId = "local_ep_" + episode.id
+    val newEpisode = PodcastEpisode(localEpisodeId,(episodes?.size ?: 0) + 1,episode.episode,episode.episodeType,episode.title,episode.subtitle,episode.description,null,null,null,audioTrack,audioTrack.duration,0, episode.id, localEpisodeId)
     episodes?.add(newEpisode)
 
     var index = 1
@@ -95,10 +107,14 @@ class Podcast(
     return newEpisode
   }
 
-  // Used for FolderScanner local podcast item to get copy of Podcast excluding episodes
   @JsonIgnore
-  override fun getLocalCopy(): Podcast {
-    return Podcast(metadata as PodcastMetadata,coverPath,tags, mutableListOf(),autoDownloadEpisodes, 0)
+  fun getNextUnfinishedEpisode(libraryItemId:String, mediaManager: MediaManager):PodcastEpisode? {
+    val sortedEpisodes = episodes?.sortedByDescending { it.publishedAt }
+    val podcastEpisode = sortedEpisodes?.find { episode ->
+      val progress = mediaManager.serverUserMediaProgress.find { it.libraryItemId == libraryItemId && it.episodeId == episode.id }
+      progress == null || !progress.isFinished
+    }
+    return podcastEpisode
   }
 }
 
@@ -122,10 +138,13 @@ class Book(
   override fun setAudioTracks(audioTracks:MutableList<AudioTrack>) {
     tracks = audioTracks
     tracks?.sortBy { it.index }
-    // TODO: Is it necessary to calculate this each time? check if can remove safely
+
     var totalDuration = 0.0
+    var currentStartOffset = 0.0
     tracks?.forEach {
       totalDuration += it.duration
+      it.startOffset = currentStartOffset
+      currentStartOffset += it.duration
     }
     duration = totalDuration
   }
@@ -158,7 +177,6 @@ class Book(
     }
     duration = totalDuration
   }
-
   @JsonIgnore
   override fun getLocalCopy(): Book {
     return Book(metadata as BookMetadata,coverPath,tags, mutableListOf(),chapters,mutableListOf(),null,null, 0)
@@ -228,21 +246,32 @@ data class PodcastEpisode(
   var title:String?,
   var subtitle:String?,
   var description:String?,
+  var pubDate:String?,
+  var publishedAt:Long?,
   var audioFile:AudioFile?,
   var audioTrack:AudioTrack?,
   var duration:Double?,
   var size:Long?,
-  var serverEpisodeId:String? // For local podcasts to match with server podcasts
+  var serverEpisodeId:String?, // For local podcasts to match with server podcasts
+  var localEpisodeId:String? // For Android Auto server episodes with local copy
 ) {
   @JsonIgnore
-  fun getMediaDescription(libraryItem:LibraryItemWrapper, progress:MediaProgressWrapper?): MediaDescriptionCompat {
-    val coverUri = if(libraryItem is LocalLibraryItem) {
+  fun getMediaDescription(libraryItem:LibraryItemWrapper, progress:MediaProgressWrapper?, ctx: Context?): MediaDescriptionCompat {
+    val coverUri = if (libraryItem is LocalLibraryItem) {
       libraryItem.getCoverUri()
     } else {
       (libraryItem as LibraryItem).getCoverUri()
     }
 
     val extras = Bundle()
+
+    if (localEpisodeId != null) {
+      extras.putLong(
+        MediaDescriptionCompat.EXTRA_DOWNLOAD_STATUS,
+        MediaDescriptionCompat.STATUS_DOWNLOADED
+      )
+    }
+
     if (progress != null) {
       if (progress.isFinished) {
         extras.putInt(
@@ -264,22 +293,21 @@ data class PodcastEpisode(
         MediaConstants.DESCRIPTION_EXTRAS_VALUE_COMPLETION_STATUS_NOT_PLAYED
       )
     }
-//    return MediaMetadataCompat.Builder().apply {
-//      putString(MediaMetadataCompat.METADATA_KEY_MEDIA_ID, id)
-//      putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_TITLE, title)
-//      putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
-//      putString(MediaMetadataCompat.METADATA_KEY_AUTHOR, podcast.metadata.getAuthorDisplayName())
-//      putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON_URI, coverUri.toString())
-//
-//    }.build()
-    val libraryItemDescription = libraryItem.getMediaDescription(null)
-    return MediaDescriptionCompat.Builder()
-      .setMediaId(id)
+
+    val libraryItemDescription = libraryItem.getMediaDescription(null, ctx)
+    val mediaId = localEpisodeId ?: id
+    val mediaDescriptionBuilder = MediaDescriptionCompat.Builder()
+      .setMediaId(mediaId)
       .setTitle(title)
       .setIconUri(coverUri)
       .setSubtitle(libraryItemDescription.title)
       .setExtras(extras)
-      .build()
+
+    libraryItemDescription.iconBitmap?.let {
+      mediaDescriptionBuilder.setIconBitmap(it)
+    }
+
+    return mediaDescriptionBuilder.build()
   }
 }
 
@@ -330,36 +358,6 @@ data class Folder(
 )
 
 @JsonIgnoreProperties(ignoreUnknown = true)
-data class AudioTrack(
-  var index:Int,
-  var startOffset:Double,
-  var duration:Double,
-  var title:String,
-  var contentUrl:String,
-  var mimeType:String,
-  var metadata:FileMetadata?,
-  var isLocal:Boolean,
-  var localFileId:String?,
-  var audioProbeResult:AudioProbeResult?,
-  var serverIndex:Int? // Need to know if server track index is different
-) {
-
-  @get:JsonIgnore
-  val startOffsetMs get() = (startOffset * 1000L).toLong()
-  @get:JsonIgnore
-  val durationMs get() = (duration * 1000L).toLong()
-  @get:JsonIgnore
-  val endOffsetMs get() = startOffsetMs + durationMs
-  @get:JsonIgnore
-  val relPath get() = metadata?.relPath ?: ""
-
-  @JsonIgnore
-  fun getBookChapter():BookChapter {
-    return BookChapter(index + 1,startOffset, startOffset + duration, title)
-  }
-}
-
-@JsonIgnoreProperties(ignoreUnknown = true)
 data class BookChapter(
   var id:Int,
   var start:Double,
@@ -372,26 +370,14 @@ data class BookChapter(
   val endMs get() = (end * 1000L).toLong()
 }
 
-@JsonIgnoreProperties(ignoreUnknown = true)
-class MediaProgress(
-  var id:String,
-  var libraryItemId:String,
-  var episodeId:String?,
-  var duration:Double, // seconds
-  progress:Double, // 0 to 1
-  var currentTime:Double,
-  isFinished:Boolean,
-  var lastUpdate:Long,
-  var startedAt:Long,
-  var finishedAt:Long?
-) : MediaProgressWrapper(isFinished, progress)
-
 @JsonTypeInfo(use= JsonTypeInfo.Id.DEDUCTION, defaultImpl = MediaProgress::class)
 @JsonSubTypes(
   JsonSubTypes.Type(MediaProgress::class),
   JsonSubTypes.Type(LocalMediaProgress::class)
 )
-open class MediaProgressWrapper(var isFinished:Boolean, var progress:Double)
+open class MediaProgressWrapper(var isFinished:Boolean, var currentTime:Double, var progress:Double) {
+  open val mediaItemId get() = ""
+}
 
 // Helper class
 data class LibraryItemWithEpisode(

@@ -50,6 +50,9 @@ export default {
   watch: {
     showBookshelfListView(newVal) {
       this.resetEntities()
+    },
+    seriesId() {
+      this.resetEntities()
     }
   },
   computed: {
@@ -85,26 +88,32 @@ export default {
     filterBy() {
       return this.$store.getters['user/getUserSetting']('mobileFilterBy')
     },
+    collapseSeries() {
+      return this.$store.getters['user/getUserSetting']('collapseSeries')
+    },
+    collapseBookSeries() {
+      return this.$store.getters['user/getUserSetting']('collapseBookSeries')
+    },
     isCoverSquareAspectRatio() {
       return this.bookCoverAspectRatio === 1
     },
     bookCoverAspectRatio() {
-      return this.$store.getters['getBookCoverAspectRatio']
+      return this.$store.getters['libraries/getBookCoverAspectRatio']
     },
     bookWidth() {
       var coverSize = 100
       if (window.innerWidth <= 375) coverSize = 90
 
-      if (this.isCoverSquareAspectRatio) return coverSize * 1.6
+      if (this.isCoverSquareAspectRatio || this.entityName === 'playlists') return coverSize * 1.6
       return coverSize
     },
     bookHeight() {
-      if (this.isCoverSquareAspectRatio) return this.bookWidth
+      if (this.isCoverSquareAspectRatio || this.entityName === 'playlists') return this.bookWidth
       return this.bookWidth * 1.6
     },
     entityWidth() {
       if (this.showBookshelfListView) return this.bookshelfWidth - 16
-      if (this.isBookEntity) return this.bookWidth
+      if (this.isBookEntity || this.entityName === 'playlists') return this.bookWidth
       return this.bookWidth * 2
     },
     entityHeight() {
@@ -134,7 +143,7 @@ export default {
       return this.$store.getters['getAltViewEnabled']
     },
     sizeMultiplier() {
-      var baseSize = this.isCoverSquareAspectRatio ? 192 : 120
+      const baseSize = this.isCoverSquareAspectRatio ? 192 : 120
       return this.entityWidth / baseSize
     }
   },
@@ -145,7 +154,7 @@ export default {
       })
     },
     async fetchEntities(page) {
-      var startIndex = page * this.booksPerFetch
+      const startIndex = page * this.booksPerFetch
 
       this.isFetchingEntities = true
 
@@ -153,11 +162,11 @@ export default {
         this.currentSFQueryString = this.buildSearchParams()
       }
 
-      var entityPath = this.entityName === 'books' || this.entityName === 'series-books' ? `items` : this.entityName
-      var sfQueryString = this.currentSFQueryString ? this.currentSFQueryString + '&' : ''
-      var fullQueryString = `?${sfQueryString}limit=${this.booksPerFetch}&page=${page}&minified=1`
+      const entityPath = this.entityName === 'books' || this.entityName === 'series-books' ? `items` : this.entityName
+      const sfQueryString = this.currentSFQueryString ? this.currentSFQueryString + '&' : ''
+      const fullQueryString = `?${sfQueryString}limit=${this.booksPerFetch}&page=${page}&minified=1`
 
-      var payload = await this.$axios.$get(`/api/libraries/${this.currentLibraryId}/${entityPath}${fullQueryString}`).catch((error) => {
+      const payload = await this.$axios.$get(`/api/libraries/${this.currentLibraryId}/${entityPath}${fullQueryString}`).catch((error) => {
         console.error('failed to fetch books', error)
         return null
       })
@@ -179,13 +188,13 @@ export default {
         }
 
         for (let i = 0; i < payload.results.length; i++) {
-          var index = i + startIndex
+          const index = i + startIndex
           this.entities[index] = payload.results[i]
           if (this.entityComponentRefs[index]) {
             this.entityComponentRefs[index].setEntity(this.entities[index])
 
             if (this.isBookEntity) {
-              var localLibraryItem = this.localLibraryItems.find((lli) => lli.libraryItemId == this.entities[index].id)
+              const localLibraryItem = this.localLibraryItems.find((lli) => lli.libraryItemId == this.entities[index].id)
               if (localLibraryItem) {
                 this.entityComponentRefs[index].setLocalLibraryItem(localLibraryItem)
               }
@@ -309,7 +318,7 @@ export default {
       var { clientHeight, clientWidth } = bookshelf
       this.bookshelfHeight = clientHeight
       this.bookshelfWidth = clientWidth
-      this.entitiesPerShelf = this.showBookshelfListView ? 1 : Math.floor((this.bookshelfWidth - 16) / this.totalEntityCardWidth)
+      this.entitiesPerShelf = Math.max(1, this.showBookshelfListView ? 1 : Math.floor((this.bookshelfWidth - 16) / this.totalEntityCardWidth))
       this.shelvesPerPage = Math.ceil(this.bookshelfHeight / this.shelfHeight) + 2
       this.bookshelfMarginLeft = (this.bookshelfWidth - this.entitiesPerShelf * this.totalEntityCardWidth) / 2
 
@@ -356,8 +365,9 @@ export default {
       let searchParams = new URLSearchParams()
       if (this.page === 'series-books') {
         searchParams.set('filter', `series.${this.$encode(this.seriesId)}`)
-        searchParams.set('sort', 'book.volumeNumber')
-        searchParams.set('desc', 0)
+        if (this.collapseBookSeries) {
+          searchParams.set('collapseseries', 1)
+        }
       } else {
         if (this.filterBy && this.filterBy !== 'all') {
           searchParams.set('filter', this.filterBy)
@@ -373,15 +383,16 @@ export default {
       return searchParams.toString()
     },
     checkUpdateSearchParams() {
-      var newSearchParams = this.buildSearchParams()
-      var currentQueryString = window.location.search
+      const newSearchParams = this.buildSearchParams()
+      let currentQueryString = window.location.search
       if (currentQueryString && currentQueryString.startsWith('?')) currentQueryString = currentQueryString.slice(1)
 
-      if (newSearchParams === '') {
+      if (newSearchParams === '' && !currentQueryString) {
         return false
       }
       if (newSearchParams !== this.currentSFQueryString || newSearchParams !== currentQueryString) {
-        let newurl = window.location.protocol + '//' + window.location.host + window.location.pathname + '?' + newSearchParams
+        const queryString = newSearchParams ? `?${newSearchParams}` : ''
+        let newurl = window.location.protocol + '//' + window.location.host + window.location.pathname + queryString
         window.history.replaceState({ path: newurl }, '', newurl)
 
         this.routeFullPath = window.location.pathname + (window.location.search || '') // Update for saving scroll position
@@ -391,12 +402,17 @@ export default {
       return false
     },
     settingsUpdated(settings) {
-      var wasUpdated = this.checkUpdateSearchParams()
+      const wasUpdated = this.checkUpdateSearchParams()
       if (wasUpdated) {
         this.resetEntities()
       }
     },
     libraryChanged() {
+      if (this.currentLibraryMediaType !== 'book' && (this.page === 'series' || this.page === 'collections' || this.page === 'series-books')) {
+        this.$router.replace('/bookshelf')
+        return
+      }
+
       if (this.hasFilter) {
         this.clearFilter()
       } else {
@@ -448,35 +464,55 @@ export default {
         this.libraryItemUpdated(ab)
       })
     },
+    screenOrientationChange() {
+      setTimeout(() => {
+        console.log('LazyBookshelf Screen orientation change')
+        this.resetEntities()
+      }, 50)
+    },
     initListeners() {
-      var bookshelf = document.getElementById('bookshelf-wrapper')
+      const bookshelf = document.getElementById('bookshelf-wrapper')
       if (bookshelf) {
         bookshelf.addEventListener('scroll', this.scroll)
       }
 
       this.$eventBus.$on('library-changed', this.libraryChanged)
-      this.$store.commit('user/addSettingsListener', { id: 'lazy-bookshelf', meth: this.settingsUpdated })
+      this.$eventBus.$on('user-settings', this.settingsUpdated)
 
       this.$socket.$on('item_updated', this.libraryItemUpdated)
       this.$socket.$on('item_added', this.libraryItemAdded)
       this.$socket.$on('item_removed', this.libraryItemRemoved)
       this.$socket.$on('items_updated', this.libraryItemsUpdated)
       this.$socket.$on('items_added', this.libraryItemsAdded)
+
+      if (screen.orientation) {
+        // Not available on ios
+        screen.orientation.addEventListener('change', this.screenOrientationChange)
+      } else {
+        document.addEventListener('orientationchange', this.screenOrientationChange)
+      }
     },
     removeListeners() {
-      var bookshelf = document.getElementById('bookshelf-wrapper')
+      const bookshelf = document.getElementById('bookshelf-wrapper')
       if (bookshelf) {
         bookshelf.removeEventListener('scroll', this.scroll)
       }
 
       this.$eventBus.$off('library-changed', this.libraryChanged)
-      this.$store.commit('user/removeSettingsListener', 'lazy-bookshelf')
+      this.$eventBus.$off('user-settings', this.settingsUpdated)
 
       this.$socket.$off('item_updated', this.libraryItemUpdated)
       this.$socket.$off('item_added', this.libraryItemAdded)
       this.$socket.$off('item_removed', this.libraryItemRemoved)
       this.$socket.$off('items_updated', this.libraryItemsUpdated)
       this.$socket.$off('items_added', this.libraryItemsAdded)
+
+      if (screen.orientation) {
+        // Not available on ios
+        screen.orientation.removeEventListener('change', this.screenOrientationChange)
+      } else {
+        document.removeEventListener('orientationchange', this.screenOrientationChange)
+      }
     }
   },
   updated() {

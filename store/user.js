@@ -5,19 +5,20 @@ export const state = () => ({
     mobileOrderBy: 'addedAt',
     mobileOrderDesc: true,
     mobileFilterBy: 'all',
-    orderBy: 'book.title',
-    orderDesc: false,
-    filterBy: 'all',
     playbackRate: 1,
-    bookshelfCoverSize: 120
-  },
-  settingsListeners: []
+    collapseSeries: false,
+    collapseBookSeries: false
+  }
 })
 
 export const getters = {
   getIsRoot: (state) => state.user && state.user.type === 'root',
+  getIsAdminOrUp: (state) => state.user && (state.user.type === 'admin' || state.user.type === 'root'),
   getToken: (state) => {
     return state.user ? state.user.token : null
+  },
+  getServerConnectionConfigId: (state) => {
+    return state.serverConnectionConfig ? state.serverConnectionConfig.id : null
   },
   getServerAddress: (state) => {
     return state.serverConnectionConfig ? state.serverConnectionConfig.address : null
@@ -36,7 +37,7 @@ export const getters = {
     })
   },
   getUserBookmarksForItem: (state) => (libraryItemId) => {
-    if (!state.user.bookmarks) return []
+    if (!state?.user?.bookmarks) return []
     return state.user.bookmarks.filter(bm => bm.libraryItemId === libraryItemId)
   },
   getUserSetting: (state) => (key) => {
@@ -50,7 +51,7 @@ export const getters = {
 export const actions = {
   // When changing libraries make sure sort and filter is still valid
   checkUpdateLibrarySortFilter({ state, dispatch, commit }, mediaType) {
-    var settingsUpdate = {}
+    const settingsUpdate = {}
     if (mediaType == 'podcast') {
       if (state.settings.mobileOrderBy == 'media.metadata.authorName' || state.settings.mobileOrderBy == 'media.metadata.authorNameLF') {
         settingsUpdate.mobileOrderBy = 'media.metadata.author'
@@ -61,10 +62,10 @@ export const actions = {
       if (state.settings.mobileOrderBy == 'media.metadata.publishedYear') {
         settingsUpdate.mobileOrderBy = 'media.metadata.title'
       }
-      var invalidFilters = ['series', 'authors', 'narrators', 'languages', 'progress', 'issues']
-      var filterByFirstPart = (state.settings.mobileFilterBy || '').split('.').shift()
+      const invalidFilters = ['series', 'authors', 'narrators', 'languages', 'progress', 'issues']
+      const filterByFirstPart = (state.settings.mobileFilterBy || '').split('.').shift()
       if (invalidFilters.includes(filterByFirstPart)) {
-        settingsUpdate.filterBy = 'all'
+        settingsUpdate.mobileFilterBy = 'all'
       }
     } else {
       if (state.settings.mobileOrderBy == 'media.metadata.author') {
@@ -79,24 +80,34 @@ export const actions = {
     }
   },
   async updateUserSettings({ state, commit }, payload) {
-    if (state.serverConnectionConfig) {
-      var updatePayload = {
-        ...payload
+    if (!payload) return false
+
+    let hasChanges = false
+    const existingSettings = { ...state.settings }
+    for (const key in existingSettings) {
+      if (payload[key] !== undefined && existingSettings[key] !== payload[key]) {
+        hasChanges = true
+        existingSettings[key] = payload[key]
       }
-      return this.$axios.$patch('/api/me/settings', updatePayload).then((result) => {
-        if (result.success) {
-          commit('setSettings', result.settings)
-          return true
-        } else {
-          return false
+    }
+    if (hasChanges) {
+      commit('setSettings', existingSettings)
+      await this.$localStore.setUserSettings(existingSettings)
+      this.$eventBus.$emit('user-settings', state.settings)
+    }
+  },
+  async loadUserSettings({ state, commit }) {
+    const userSettingsFromLocal = await this.$localStore.getUserSettings()
+
+    if (userSettingsFromLocal) {
+      const userSettings = { ...state.settings }
+      for (const key in userSettings) {
+        if (userSettingsFromLocal[key] !== undefined) {
+          userSettings[key] = userSettingsFromLocal[key]
         }
-      }).catch((error) => {
-        console.error('Failed to update settings', error)
-        return false
-      })
-    } else {
-      console.log('Update settings without server')
-      commit('setSettings', payload)
+      }
+      commit('setSettings', userSettings)
+      this.$eventBus.$emit('user-settings', state.settings)
     }
   }
 }
@@ -115,7 +126,7 @@ export const mutations = {
   },
   updateUserMediaProgress(state, data) {
     if (!data || !state.user) return
-    var mediaProgressIndex = state.user.mediaProgress.findIndex(mp => mp.id === data.id)
+    const mediaProgressIndex = state.user.mediaProgress.findIndex(mp => mp.id === data.id)
     if (mediaProgressIndex >= 0) {
       state.user.mediaProgress.splice(mediaProgressIndex, 1, data)
     } else {
@@ -127,30 +138,6 @@ export const mutations = {
   },
   setSettings(state, settings) {
     if (!settings) return
-
-    var hasChanges = false
-    for (const key in settings) {
-      if (state.settings[key] !== settings[key]) {
-        if (key === 'mobileOrderBy' && settings[key] === 'recent') {
-          settings[key] = 'addedAt'
-        }
-        hasChanges = true
-        state.settings[key] = settings[key]
-      }
-    }
-    if (hasChanges) {
-      this.$localStore.setUserSettings({ ...state.settings })
-      state.settingsListeners.forEach((listener) => {
-        listener.meth(state.settings)
-      })
-    }
-  },
-  addSettingsListener(state, listener) {
-    var index = state.settingsListeners.findIndex(l => l.id === listener.id)
-    if (index >= 0) state.settingsListeners.splice(index, 1, listener)
-    else state.settingsListeners.push(listener)
-  },
-  removeSettingsListener(state, listenerId) {
-    state.settingsListeners = state.settingsListeners.filter(l => l.id !== listenerId)
+    state.settings = settings
   }
 }

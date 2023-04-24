@@ -1,10 +1,24 @@
 package com.audiobookshelf.app.data
 
+import android.content.Context
 import android.support.v4.media.MediaDescriptionCompat
+import android.util.Log
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.annotation.JsonSubTypes
 import com.fasterxml.jackson.annotation.JsonTypeInfo
+
+enum class LockOrientationSetting {
+  NONE, PORTRAIT, LANDSCAPE
+}
+
+enum class HapticFeedbackSetting {
+  OFF, LIGHT, MEDIUM, HEAVY
+}
+
+enum class ShakeSensitivitySetting {
+  VERY_LOW, LOW, MEDIUM, HIGH, VERY_HIGH
+}
 
 data class ServerConnectionConfig(
   var id:String,
@@ -16,46 +30,6 @@ data class ServerConnectionConfig(
   var token:String,
   var customHeaders:Map<String, String>?
 )
-
-data class DeviceSettings(
-  var disableAutoRewind:Boolean,
-  var enableAltView:Boolean,
-  var jumpBackwardsTime:Int,
-  var jumpForwardTime:Int,
-  var disableShakeToResetSleepTimer:Boolean
-) {
-  companion object {
-    // Static method to get default device settings
-    fun default():DeviceSettings {
-      return DeviceSettings(
-        disableAutoRewind = false,
-        enableAltView = false,
-        jumpBackwardsTime = 10,
-        jumpForwardTime = 10,
-        disableShakeToResetSleepTimer = false
-      )
-    }
-  }
-
-  @get:JsonIgnore
-  val jumpBackwardsTimeMs get() = (jumpBackwardsTime ?: default().jumpBackwardsTime) * 1000L
-  @get:JsonIgnore
-  val jumpForwardTimeMs get() = (jumpForwardTime ?: default().jumpBackwardsTime) * 1000L
-}
-
-data class DeviceData(
-  var serverConnectionConfigs:MutableList<ServerConnectionConfig>,
-  var lastServerConnectionConfigId:String?,
-  var currentLocalPlaybackSession:PlaybackSession?, // Stored to open up where left off for local media
-  var deviceSettings:DeviceSettings?
-) {
-  @JsonIgnore
-  fun getLastServerConnectionConfig():ServerConnectionConfig? {
-    return lastServerConnectionConfigId?.let { lsccid ->
-      return serverConnectionConfigs.find { it.id == lsccid }
-    }
-  }
-}
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class LocalFile(
@@ -95,11 +69,12 @@ data class LocalFolder(
 )
 open class LibraryItemWrapper(var id:String) {
   @JsonIgnore
-  open fun getMediaDescription(progress:MediaProgressWrapper?): MediaDescriptionCompat { return MediaDescriptionCompat.Builder().build() }
+  open fun getMediaDescription(progress:MediaProgressWrapper?, ctx: Context?): MediaDescriptionCompat { return MediaDescriptionCompat.Builder().build() }
 }
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class DeviceInfo(
+  var deviceId:String,
   var manufacturer:String,
   var model:String,
   var brand:String,
@@ -114,3 +89,84 @@ data class PlayItemRequestPayload(
   var forceTranscode:Boolean,
   var deviceInfo:DeviceInfo
 )
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class DeviceSettings(
+  var disableAutoRewind:Boolean,
+  var enableAltView:Boolean,
+  var jumpBackwardsTime:Int,
+  var jumpForwardTime:Int,
+  var disableShakeToResetSleepTimer:Boolean,
+  var shakeSensitivity: ShakeSensitivitySetting,
+  var lockOrientation: LockOrientationSetting,
+  var hapticFeedback: HapticFeedbackSetting,
+  var autoSleepTimer: Boolean,
+  var autoSleepTimerStartTime: String,
+  var autoSleepTimerEndTime: String,
+  var sleepTimerLength: Long, // Time in milliseconds
+  var disableSleepTimerFadeOut: Boolean,
+  var disableSleepTimerResetFeedback: Boolean
+) {
+  companion object {
+    // Static method to get default device settings
+    fun default():DeviceSettings {
+      return DeviceSettings(
+        disableAutoRewind = false,
+        enableAltView = true,
+        jumpBackwardsTime = 10,
+        jumpForwardTime = 10,
+        disableShakeToResetSleepTimer = false,
+        shakeSensitivity = ShakeSensitivitySetting.MEDIUM,
+        lockOrientation = LockOrientationSetting.NONE,
+        hapticFeedback = HapticFeedbackSetting.LIGHT,
+        autoSleepTimer = false,
+        autoSleepTimerStartTime = "22:00",
+        autoSleepTimerEndTime = "06:00",
+        sleepTimerLength = 900000L, // 15 minutes
+        disableSleepTimerFadeOut = false,
+        disableSleepTimerResetFeedback = false
+      )
+    }
+  }
+
+  @get:JsonIgnore
+  val jumpBackwardsTimeMs get() = jumpBackwardsTime * 1000L
+  @get:JsonIgnore
+  val jumpForwardTimeMs get() = jumpForwardTime * 1000L
+  @get:JsonIgnore
+  val autoSleepTimerStartHour get() = autoSleepTimerStartTime.split(":")[0].toInt()
+  @get:JsonIgnore
+  val autoSleepTimerStartMinute get() = autoSleepTimerStartTime.split(":")[1].toInt()
+  @get:JsonIgnore
+  val autoSleepTimerEndHour get() = autoSleepTimerEndTime.split(":")[0].toInt()
+  @get:JsonIgnore
+  val autoSleepTimerEndMinute get() = autoSleepTimerEndTime.split(":")[1].toInt()
+
+  @JsonIgnore
+  fun getShakeThresholdGravity() : Float { // Used in ShakeDetector
+    return if (shakeSensitivity == ShakeSensitivitySetting.VERY_HIGH) 1.2f
+    else if (shakeSensitivity == ShakeSensitivitySetting.HIGH) 1.4f
+    else if (shakeSensitivity == ShakeSensitivitySetting.MEDIUM) 1.6f
+    else if (shakeSensitivity == ShakeSensitivitySetting.LOW) 2f
+    else if (shakeSensitivity == ShakeSensitivitySetting.VERY_LOW) 2.7f
+    else {
+      Log.e("DeviceSetting", "Invalid ShakeSensitivitySetting $shakeSensitivity")
+      1.6f
+    }
+  }
+}
+
+data class DeviceData(
+  var serverConnectionConfigs:MutableList<ServerConnectionConfig>,
+  var lastServerConnectionConfigId:String?,
+  var deviceSettings: DeviceSettings?,
+  var lastPlaybackSession: PlaybackSession?
+) {
+  @JsonIgnore
+  fun getLastServerConnectionConfig(): ServerConnectionConfig? {
+    return lastServerConnectionConfigId?.let { lsccid ->
+      return serverConnectionConfigs.find { it.id == lsccid }
+    }
+  }
+}
+

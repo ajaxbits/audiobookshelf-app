@@ -1,9 +1,11 @@
 package com.audiobookshelf.app.data
 
+import android.content.Context
 import android.net.Uri
 import android.os.Bundle
 import android.support.v4.media.MediaDescriptionCompat
 import androidx.media.utils.MediaConstants
+import com.audiobookshelf.app.BuildConfig
 import com.audiobookshelf.app.R
 import com.audiobookshelf.app.device.DeviceManager
 import com.fasterxml.jackson.annotation.JsonIgnore
@@ -29,7 +31,8 @@ class LibraryItem(
   var mediaType:String,
   var media:MediaType,
   var libraryFiles:MutableList<LibraryFile>?,
-  var userMediaProgress:MediaProgress? // Only included when requesting library item with progress (for downloads)
+  var userMediaProgress:MediaProgress?, // Only included when requesting library item with progress (for downloads)
+  var localLibraryItemId:String? // For Android Auto
 ) : LibraryItemWrapper(id) {
   @get:JsonIgnore
   val title get() = media.metadata.title
@@ -39,7 +42,7 @@ class LibraryItem(
   @JsonIgnore
   fun getCoverUri(): Uri {
     if (media.coverPath == null) {
-      return Uri.parse("android.resource://com.audiobookshelf.app/" + R.drawable.icon)
+      return Uri.parse("android.resource://${BuildConfig.APPLICATION_ID}/" + R.drawable.icon)
     }
 
     return Uri.parse("${DeviceManager.serverAddress}/api/items/$id/cover?token=${DeviceManager.token}")
@@ -55,8 +58,16 @@ class LibraryItem(
   }
 
   @JsonIgnore
-  override fun getMediaDescription(progress:MediaProgressWrapper?): MediaDescriptionCompat {
+  override fun getMediaDescription(progress:MediaProgressWrapper?, ctx: Context?): MediaDescriptionCompat {
     val extras = Bundle()
+
+    if (localLibraryItemId != null) {
+      extras.putLong(
+        MediaDescriptionCompat.EXTRA_DOWNLOAD_STATUS,
+        MediaDescriptionCompat.STATUS_DOWNLOADED
+      )
+    }
+
     if (progress != null) {
       if (progress.isFinished) {
         extras.putInt(
@@ -79,8 +90,9 @@ class LibraryItem(
       )
     }
 
+    val mediaId = localLibraryItemId ?: id
     return MediaDescriptionCompat.Builder()
-      .setMediaId(id)
+      .setMediaId(mediaId)
       .setTitle(title)
       .setIconUri(getCoverUri())
       .setSubtitle(authorName)

@@ -1,7 +1,7 @@
 <template>
   <modals-modal v-model="show" :width="300" :processing="processing" height="100%">
     <template #outer>
-      <div class="absolute top-4 left-4 z-40" style="max-width: 80%">
+      <div class="absolute top-8 left-4 z-40" style="max-width: 80%">
         <p class="text-white text-2xl truncate">Libraries</p>
       </div>
     </template>
@@ -13,7 +13,7 @@
             <li :key="library.id" class="text-gray-50 select-none relative py-3 cursor-pointer hover:bg-black-400" :class="currentLibraryId === library.id ? 'bg-bg bg-opacity-80' : ''" role="option" @click="clickedOption(library)">
               <div v-show="currentLibraryId === library.id" class="absolute top-0 left-0 w-0.5 bg-warning h-full" />
               <div class="flex items-center px-3">
-                <widgets-library-icon :icon="library.icon" />
+                <ui-library-icon :icon="library.icon" />
                 <span class="font-normal block truncate text-lg ml-4">{{ library.name }}</span>
               </div>
             </li>
@@ -49,6 +49,7 @@ export default {
   },
   methods: {
     async clickedOption(lib) {
+      await this.$hapticsImpact()
       this.show = false
       if (lib.id === this.currentLibraryId) return
       await this.$store.dispatch('libraries/fetch', lib.id)

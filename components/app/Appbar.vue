@@ -1,6 +1,6 @@
 <template>
-  <div class="w-full h-16 bg-primary relative">
-    <div id="appbar" class="absolute top-0 left-0 w-full h-full z-10 flex items-center px-2">
+  <div class="w-full h-16 bg-primary relative z-20">
+    <div id="appbar" class="absolute top-0 left-0 w-full h-full flex items-center px-2">
       <nuxt-link v-show="!showBack" to="/" class="mr-3">
         <img src="/Logo.png" class="h-10 w-10" />
       </nuxt-link>
@@ -9,8 +9,8 @@
       </a>
       <div v-if="user && currentLibrary">
         <div class="pl-1.5 pr-2.5 py-2 bg-bg bg-opacity-30 rounded-md flex items-center" @click="clickShowLibraryModal">
-          <widgets-library-icon :icon="currentLibraryIcon" :size="4" />
-          <p class="text-sm font-book leading-4 ml-2 mt-0.5 max-w-24 truncate">{{ currentLibraryName }}</p>
+          <ui-library-icon :icon="currentLibraryIcon" :size="4" font-size="base" />
+          <p class="text-smleading-4 ml-2 mt-0.5 max-w-24 truncate">{{ currentLibraryName }}</p>
         </div>
       </div>
 
@@ -21,12 +21,12 @@
       <widgets-download-progress-indicator />
 
       <!-- Must be connected to a server to cast, only supports media items on server -->
-      <div v-show="isCastAvailable && user" class="mx-2 cursor-pointer mt-1.5">
-        <span class="material-icons text-2xl" :class="isCasting ? 'text-success' : ''" @click="castClick">cast</span>
+      <div v-show="isCastAvailable && user" class="mx-2 cursor-pointer flex items-center pt-0.5" @click="castClick">
+        <span class="material-icons" :class="isCasting ? 'text-success' : ''">cast</span>
       </div>
 
-      <nuxt-link v-if="user" class="h-7 mx-1.5" to="/search">
-        <span class="material-icons" style="font-size: 1.75rem">search</span>
+      <nuxt-link v-if="user" class="h-7 mx-1.5" style="padding-top: 3px" to="/search">
+        <span class="material-icons">search</span>
       </nuxt-link>
 
       <div class="h-7 mx-1.5">

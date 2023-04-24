@@ -15,17 +15,22 @@ export const state = () => ({
   networkConnectionType: null,
   isNetworkUnmetered: true,
   isFirstLoad: true,
+  isFirstAudioLoad: true,
   hasStoragePermission: false,
   selectedLibraryItem: null,
   showReader: false,
   showSideDrawer: false,
   isNetworkListenerInit: false,
   serverSettings: null,
-  lastBookshelfScrollData: {},
-  lastLocalMediaSyncResults: null
+  lastBookshelfScrollData: {}
 })
 
 export const getters = {
+  getIsMediaStreaming: state => (libraryItemId, episodeId) => {
+    if (!state.playerLibraryItemId) return null
+    if (!episodeId) return state.playerLibraryItemId == libraryItemId
+    return state.playerLibraryItemId == libraryItemId && state.playerEpisodeId == episodeId
+  },
   getIsItemStreaming: state => libraryItemId => {
     return state.playerLibraryItemId == libraryItemId
   },
@@ -35,10 +40,6 @@ export const getters = {
   getServerSetting: state => key => {
     if (!state.serverSettings) return null
     return state.serverSettings[key]
-  },
-  getBookCoverAspectRatio: state => {
-    if (!state.serverSettings) return 1
-    return state.serverSettings.coverAspectRatio === 0 ? 1.6 : 1
   },
   getJumpForwardTime: state => {
     if (!state.deviceData || !state.deviceData.deviceSettings) return 10
@@ -51,6 +52,10 @@ export const getters = {
   getAltViewEnabled: state => {
     if (!state.deviceData || !state.deviceData.deviceSettings) return false
     return state.deviceData.deviceSettings.enableAltView
+  },
+  getOrientationLockSetting: state => {
+    if (!state.deviceData || !state.deviceData.deviceSettings) return false
+    return state.deviceData.deviceSettings.lockOrientation
   }
 }
 
@@ -60,7 +65,7 @@ export const actions = {
     if (state.isNetworkListenerInit) return
     commit('setNetworkListenerInit', true)
 
-    var status = await Network.getStatus()
+    const status = await Network.getStatus()
     console.log('Network status', status)
     commit('setNetworkStatus', status)
 
@@ -116,6 +121,9 @@ export const mutations = {
   setIsFirstLoad(state, val) {
     state.isFirstLoad = val
   },
+  setIsFirstAudioLoad(state, val) {
+    state.isFirstAudioLoad = val
+  },
   setSocketConnected(state, val) {
     state.socketConnected = val
   },
@@ -142,8 +150,5 @@ export const mutations = {
   setServerSettings(state, val) {
     state.serverSettings = val
     this.$localStore.setServerSettings(state.serverSettings)
-  },
-  setLastLocalMediaSyncResults(state, val) {
-    state.lastLocalMediaSyncResults = val
   }
 }

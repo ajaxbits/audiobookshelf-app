@@ -1,9 +1,9 @@
 <template>
   <div>
-    <app-audio-player ref="audioPlayer" :bookmarks="bookmarks" :sleep-timer-running="isSleepTimerRunning" :sleep-time-remaining="sleepTimeRemaining" @selectPlaybackSpeed="showPlaybackSpeedModal = true" @updateTime="(t) => (currentTime = t)" @showSleepTimer="showSleepTimer" @showBookmarks="showBookmarks" />
+    <app-audio-player ref="audioPlayer" :bookmarks="bookmarks" :sleep-timer-running="isSleepTimerRunning" :sleep-time-remaining="sleepTimeRemaining" :is-server-item="!!serverLibraryItemId" @selectPlaybackSpeed="showPlaybackSpeedModal = true" @updateTime="(t) => (currentTime = t)" @showSleepTimer="showSleepTimer" @showBookmarks="showBookmarks" />
 
     <modals-playback-speed-modal v-model="showPlaybackSpeedModal" :playback-rate.sync="playbackSpeed" @update:playbackRate="updatePlaybackSpeed" @change="changePlaybackSpeed" />
-    <modals-sleep-timer-modal v-model="showSleepTimerModal" :current-time="sleepTimeRemaining" :sleep-timer-running="isSleepTimerRunning" :current-end-of-chapter-time="currentEndOfChapterTime" @change="selectSleepTimeout" @cancel="cancelSleepTimer" @increase="increaseSleepTimer" @decrease="decreaseSleepTimer" />
+    <modals-sleep-timer-modal v-model="showSleepTimerModal" :current-time="sleepTimeRemaining" :sleep-timer-running="isSleepTimerRunning" :current-end-of-chapter-time="currentEndOfChapterTime" :is-auto="isAutoSleepTimer" @change="selectSleepTimeout" @cancel="cancelSleepTimer" @increase="increaseSleepTimer" @decrease="decreaseSleepTimer" />
     <modals-bookmarks-modal v-model="showBookmarksModal" :bookmarks="bookmarks" :current-time="currentTime" :library-item-id="serverLibraryItemId" @select="selectBookmark" />
   </div>
 </template>
@@ -28,6 +28,7 @@ export default {
       isSleepTimerRunning: false,
       sleepTimerEndTime: 0,
       sleepTimeRemaining: 0,
+      isAutoSleepTimer: false,
       onLocalMediaProgressUpdateListener: null,
       onSleepTimerEndedListener: null,
       onSleepTimerSetListener: null,
@@ -38,21 +39,13 @@ export default {
       serverEpisodeId: null
     }
   },
-  watch: {
-    socketConnected(newVal) {
-      if (newVal) {
-        console.log('Socket Connected set listeners')
-        this.setListeners()
-      }
-    }
-  },
   computed: {
     bookmarks() {
       if (!this.serverLibraryItemId) return []
       return this.$store.getters['user/getUserBookmarksForItem'](this.serverLibraryItemId)
     },
-    socketConnected() {
-      return this.$store.state.socketConnected
+    isIos() {
+      return this.$platform === 'ios'
     }
   },
   methods: {
@@ -62,7 +55,7 @@ export default {
     selectBookmark(bookmark) {
       this.showBookmarksModal = false
       if (!bookmark || isNaN(bookmark.time)) return
-      var bookmarkTime = Number(bookmark.time)
+      const bookmarkTime = Number(bookmark.time)
       if (this.$refs.audioPlayer) {
         this.$refs.audioPlayer.seek(bookmarkTime)
       }
@@ -71,12 +64,11 @@ export default {
       this.isSleepTimerRunning = false
       if (currentPosition) {
         console.log('Sleep Timer Ended Current Position: ' + currentPosition)
-        var currentTime = Math.floor(currentPosition / 1000)
-        // TODO: Was syncing to the server here before
       }
     },
-    onSleepTimerSet({ value: sleepTimeRemaining }) {
-      console.log('SLEEP TIMER SET', sleepTimeRemaining)
+    onSleepTimerSet(payload) {
+      const { value: sleepTimeRemaining, isAuto } = payload
+      console.log('SLEEP TIMER SET', JSON.stringify(payload))
       if (sleepTimeRemaining === 0) {
         console.log('Sleep timer canceled')
         this.isSleepTimerRunning = false
@@ -84,6 +76,7 @@ export default {
         this.isSleepTimerRunning = true
       }
 
+      this.isAutoSleepTimer = !!isAuto
       this.sleepTimeRemaining = sleepTimeRemaining
     },
     showSleepTimer() {
@@ -155,19 +148,10 @@ export default {
       }
 
       // Settings have been loaded (at least once, so it's safe to kickoff onReady)
-      this.settingsLoaded = true
-      this.notifyOnReady()
-    },
-    setListeners() {
-      // if (!this.$server.socket) {
-      //   console.error('Invalid server socket not set')
-      //   return
-      // }
-      // this.$server.socket.on('stream_open', this.streamOpen)
-      // this.$server.socket.on('stream_closed', this.streamClosed)
-      // this.$server.socket.on('stream_progress', this.streamProgress)
-      // this.$server.socket.on('stream_ready', this.streamReady)
-      // this.$server.socket.on('stream_reset', this.streamReset)
+      if (!this.settingsLoaded) {
+        this.settingsLoaded = true
+        this.notifyOnReady()
+      }
     },
     closeStreamOnly() {
       // If user logs out or disconnects from server and not playing local
@@ -204,13 +188,15 @@ export default {
         })
     },
     async playLibraryItem(payload) {
-      var libraryItemId = payload.libraryItemId
-      var episodeId = payload.episodeId
+      const libraryItemId = payload.libraryItemId
+      const episodeId = payload.episodeId
+      const startTime = payload.startTime
+      const startWhenReady = !payload.paused
 
       // When playing local library item and can also play this item from the server
       //   then store the server library item id so it can be used if a cast is made
-      var serverLibraryItemId = payload.serverLibraryItemId || null
-      var serverEpisodeId = payload.serverEpisodeId || null
+      const serverLibraryItemId = payload.serverLibraryItemId || null
+      const serverEpisodeId = payload.serverEpisodeId || null
 
       if (libraryItemId.startsWith('local') && this.$store.state.isCasting) {
         const { value } = await Dialog.confirm({
@@ -222,16 +208,28 @@ export default {
         }
       }
 
+      // if already playing this item then jump to start time
+      if (this.$store.getters['getIsMediaStreaming'](libraryItemId, episodeId)) {
+        console.log('Already streaming item', startTime)
+        if (startTime !== undefined && startTime !== null) {
+          // seek to start time
+          AbsAudioPlayer.seek({ value: Math.floor(startTime) })
+        }
+        return
+      }
+
       this.serverLibraryItemId = null
       this.serverEpisodeId = null
 
-      var playbackRate = 1
+      let playbackRate = 1
       if (this.$refs.audioPlayer) {
         playbackRate = this.$refs.audioPlayer.currentPlaybackRate || 1
       }
 
       console.log('Called playLibraryItem', libraryItemId)
-      AbsAudioPlayer.prepareLibraryItem({ libraryItemId, episodeId, playWhenReady: true, playbackRate })
+      const preparePayload = { libraryItemId, episodeId, playWhenReady: startWhenReady, playbackRate }
+      if (startTime !== undefined && startTime !== null) preparePayload.startTime = startTime
+      AbsAudioPlayer.prepareLibraryItem(preparePayload)
         .then((data) => {
           if (data.error) {
             const errorMsg = data.error || 'Failed to play'
@@ -274,9 +272,13 @@ export default {
       this.notifyOnReady()
     },
     notifyOnReady() {
+      // TODO: iOS opens last active playback session on app launch. Should be consistent with Android
+      if (!this.isIos) return
+
       // If settings aren't loaded yet, native player will receive incorrect settings
       console.log('Notify on ready... settingsLoaded:', this.settingsLoaded, 'isReady:', this.isReady)
-      if ( this.settingsLoaded && this.isReady ) {
+      if (this.settingsLoaded && this.isReady && this.$store.state.isFirstAudioLoad) {
+        this.$store.commit('setIsFirstAudioLoad', false) // Only run this once on app launch
         AbsAudioPlayer.onReady()
       }
     }
@@ -290,13 +292,12 @@ export default {
     this.playbackSpeed = this.$store.getters['user/getUserSetting']('playbackRate')
     console.log(`[AudioPlayerContainer] Init Playback Speed: ${this.playbackSpeed}`)
 
-    this.setListeners()
     this.$eventBus.$on('abs-ui-ready', this.onReady)
     this.$eventBus.$on('play-item', this.playLibraryItem)
     this.$eventBus.$on('pause-item', this.pauseItem)
     this.$eventBus.$on('close-stream', this.closeStreamOnly)
     this.$eventBus.$on('cast-local-item', this.castLocalItem)
-    this.$store.commit('user/addSettingsListener', { id: 'streamContainer', meth: this.settingsUpdated })
+    this.$eventBus.$on('user-settings', this.settingsUpdated)
   },
   beforeDestroy() {
     if (this.onLocalMediaProgressUpdateListener) this.onLocalMediaProgressUpdateListener.remove()
@@ -304,19 +305,12 @@ export default {
     if (this.onSleepTimerSetListener) this.onSleepTimerSetListener.remove()
     if (this.onMediaPlayerChangedListener) this.onMediaPlayerChangedListener.remove()
 
-    // if (this.$server.socket) {
-    //   this.$server.socket.off('stream_open', this.streamOpen)
-    //   this.$server.socket.off('stream_closed', this.streamClosed)
-    //   this.$server.socket.off('stream_progress', this.streamProgress)
-    //   this.$server.socket.off('stream_ready', this.streamReady)
-    //   this.$server.socket.off('stream_reset', this.streamReset)
-    // }
     this.$eventBus.$off('abs-ui-ready', this.onReady)
     this.$eventBus.$off('play-item', this.playLibraryItem)
     this.$eventBus.$off('pause-item', this.pauseItem)
     this.$eventBus.$off('close-stream', this.closeStreamOnly)
     this.$eventBus.$off('cast-local-item', this.castLocalItem)
-    this.$store.commit('user/removeSettingsListener', 'streamContainer')
+    this.$eventBus.$off('user-settings', this.settingsUpdated)
   }
 }
 </script>

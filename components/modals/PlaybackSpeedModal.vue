@@ -1,7 +1,7 @@
 <template>
   <modals-modal v-model="show" @input="modalInput" :width="200" height="100%">
     <template #outer>
-      <div class="absolute top-5 left-4 z-40">
+      <div class="absolute top-8 left-4 z-40">
         <p class="text-white text-2xl truncate">Playback Speed</p>
       </div>
     </template>
@@ -43,7 +43,7 @@ export default {
     return {
       currentPlaybackRate: 0,
       MIN_SPEED: 0.5,
-      MAX_SPEED: 3
+      MAX_SPEED: 10
     }
   },
   watch: {
@@ -71,7 +71,7 @@ export default {
       }
     },
     rates() {
-      return [0.5, 1, 1.2, 1.5, 2]
+      return [0.5, 1, 1.2, 1.5, 2, 3]
     },
     canIncrement() {
       return this.playbackRate + 0.1 <= this.MAX_SPEED

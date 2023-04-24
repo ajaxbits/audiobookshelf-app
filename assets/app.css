@@ -1,5 +1,19 @@
 @import "./fonts.css";
 @import './defaultStyles.css';
+@import './absicons.css';
+
+* {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+input,
+textarea {
+  -webkit-touch-callout: auto;
+  -webkit-user-select: auto;
+  user-select: auto;
+}
 
 body {
   background-color: #262626;
@@ -19,9 +33,9 @@ body {
 }
 
 #content.playerOpen {
-  height: calc(100% - 164px);
-  min-height: calc(100% - 164px);
-  max-height: calc(100% - 164px);
+  height: calc(100% - 184px);
+  min-height: calc(100% - 184px);
+  max-height: calc(100% - 184px);
 }
 
 #bookshelf {
@@ -101,4 +115,18 @@ Bookshelf Label
   background-position: center;
   opacity: 1;
   filter: blur(20px);
+}
+
+.line-clamp-2 {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.line-clamp-4 {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
 }

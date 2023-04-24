@@ -1,11 +1,12 @@
 import Vue from 'vue'
+import vClickOutside from 'v-click-outside'
 import { App } from '@capacitor/app'
 import { Dialog } from '@capacitor/dialog'
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { formatDistance, format, addDays, isDate } from 'date-fns'
-import { Capacitor } from '@capacitor/core';
+import { Capacitor } from '@capacitor/core'
 
-Vue.prototype.$eventBus = new Vue()
+Vue.directive('click-outside', vClickOutside.directive)
 
 if (Capacitor.getPlatform() != 'web') {
   const setStatusBarStyleDark = async () => {
@@ -16,6 +17,9 @@ if (Capacitor.getPlatform() != 'web') {
 
 Vue.prototype.$isDev = process.env.NODE_ENV !== 'production'
 
+Vue.prototype.$encodeUriPath = (path) => {
+  return path.replace(/\\/g, '/').replace(/%/g, '%25').replace(/#/g, '%23')
+}
 Vue.prototype.$dateDistanceFromNow = (unixms) => {
   if (!unixms) return ''
   return formatDistance(unixms, Date.now(), { addSuffix: true })
@@ -90,10 +94,10 @@ Vue.prototype.$elapsedPrettyExtended = (seconds, useDays = true) => {
 }
 
 Vue.prototype.$secondsToTimestamp = (seconds) => {
-  var _seconds = seconds
-  var _minutes = Math.floor(seconds / 60)
+  let _seconds = seconds
+  let _minutes = Math.floor(seconds / 60)
   _seconds -= _minutes * 60
-  var _hours = Math.floor(_minutes / 60)
+  let _hours = Math.floor(_minutes / 60)
   _minutes -= _hours * 60
   _seconds = Math.floor(_seconds)
   if (!_hours) {
@@ -102,42 +106,52 @@ Vue.prototype.$secondsToTimestamp = (seconds) => {
   return `${_hours}:${_minutes.toString().padStart(2, '0')}:${_seconds.toString().padStart(2, '0')}`
 }
 
-function isClickedOutsideEl(clickEvent, elToCheckOutside, ignoreSelectors = [], ignoreElems = []) {
-  const isDOMElement = (element) => {
-    return element instanceof Element || element instanceof HTMLDocument
-  }
-
-  const clickedEl = clickEvent.srcElement
-  const didClickOnIgnoredEl = ignoreElems.filter((el) => el).some((element) => element.contains(clickedEl) || element.isEqualNode(clickedEl))
-  const didClickOnIgnoredSelector = ignoreSelectors.length ? ignoreSelectors.map((selector) => clickedEl.closest(selector)).reduce((curr, accumulator) => curr && accumulator, true) : false
-
-  if (isDOMElement(elToCheckOutside) && !elToCheckOutside.contains(clickedEl) && !didClickOnIgnoredEl && !didClickOnIgnoredSelector) {
-    return true
-  }
-
-  return false
+Vue.prototype.$secondsToTimestampFull = (seconds) => {
+  let _seconds = Math.round(seconds)
+  let _minutes = Math.floor(seconds / 60)
+  _seconds -= _minutes * 60
+  let _hours = Math.floor(_minutes / 60)
+  _minutes -= _hours * 60
+  _seconds = Math.floor(_seconds)
+  return `${_hours.toString().padStart(2, '0')}:${_minutes.toString().padStart(2, '0')}:${_seconds.toString().padStart(2, '0')}`
 }
 
-Vue.directive('click-outside', {
-  bind: function (el, binding, vnode) {
-    let vm = vnode.context;
-    let callback = binding.value;
-    if (typeof callback !== 'function') {
-      console.error('Invalid callback', binding)
-      return
-    }
-    el['__click_outside__'] = (ev) => {
-      if (isClickedOutsideEl(ev, el)) {
-        callback.call(vm, ev)
-      }
-    }
-    document.addEventListener('click', el['__click_outside__'], false)
-  },
-  unbind: function (el, binding, vnode) {
-    document.removeEventListener('click', el['__click_outside__'], false)
-    delete el['__click_outside__']
+Vue.prototype.$sanitizeFilename = (input, colonReplacement = ' - ') => {
+  if (typeof input !== 'string') {
+    return false
   }
-})
+
+  // Max is actually 255-260 for windows but this leaves padding incase ext wasnt put on yet
+  const MAX_FILENAME_LEN = 240
+
+  var replacement = ''
+  var illegalRe = /[\/\?<>\\:\*\|"]/g
+  var controlRe = /[\x00-\x1f\x80-\x9f]/g
+  var reservedRe = /^\.+$/
+  var windowsReservedRe = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/i
+  var windowsTrailingRe = /[\. ]+$/
+  var lineBreaks = /[\n\r]/g
+
+  var sanitized = input
+    .replace(':', colonReplacement) // Replace first occurrence of a colon
+    .replace(illegalRe, replacement)
+    .replace(controlRe, replacement)
+    .replace(reservedRe, replacement)
+    .replace(lineBreaks, replacement)
+    .replace(windowsReservedRe, replacement)
+    .replace(windowsTrailingRe, replacement)
+
+
+  if (sanitized.length > MAX_FILENAME_LEN) {
+    var lenToRemove = sanitized.length - MAX_FILENAME_LEN
+    var ext = Path.extname(sanitized)
+    var basename = Path.basename(sanitized, ext)
+    basename = basename.slice(0, basename.length - lenToRemove)
+    sanitized = basename + ext
+  }
+
+  return sanitized
+}
 
 function xmlToJson(xml) {
   const json = {};
@@ -156,16 +170,29 @@ Vue.prototype.$encode = encode
 const decode = (text) => Buffer.from(decodeURIComponent(text), 'base64').toString()
 Vue.prototype.$decode = decode
 
-export default ({ store, app }) => {
+Vue.prototype.$setOrientationLock = (orientationLockSetting) => {
+  if (orientationLockSetting == 'PORTRAIT') {
+    window.screen.orientation.lock('portrait')
+  } else if (orientationLockSetting == 'LANDSCAPE') {
+    window.screen.orientation.lock('landscape')
+  } else {
+    window.screen.orientation.unlock()
+  }
+}
+
+export default ({ store, app }, inject) => {
+  const eventBus = new Vue()
+  inject('eventBus', eventBus)
+
   // iOS Only
   //  backButton event does not work with iOS swipe navigation so use this workaround
   if (app.router && Capacitor.getPlatform() === 'ios') {
     app.router.beforeEach((to, from, next) => {
       if (store.state.globals.isModalOpen) {
-        Vue.prototype.$eventBus.$emit('close-modal')
+        eventBus.$emit('close-modal')
       }
       if (store.state.playerIsFullscreen) {
-        Vue.prototype.$eventBus.$emit('minimize-player')
+        eventBus.$emit('minimize-player')
       }
       next()
     })
@@ -174,11 +201,11 @@ export default ({ store, app }) => {
   // Android only
   App.addListener('backButton', async ({ canGoBack }) => {
     if (store.state.globals.isModalOpen) {
-      Vue.prototype.$eventBus.$emit('close-modal')
+      eventBus.$emit('close-modal')
       return
     }
     if (store.state.playerIsFullscreen) {
-      Vue.prototype.$eventBus.$emit('minimize-player')
+      eventBus.$emit('minimize-player')
       return
     }
     if (!canGoBack) {

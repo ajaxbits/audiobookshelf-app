@@ -39,12 +39,16 @@ class LocalLibraryItem: Object, Codable {
         }
     }
     
-    var coverContentUrl: String? {
+    var coverUrl: URL? {
         if let path = self._coverContentUrl {
-            return AbsDownloader.itemDownloadFolder(path: path)!.absoluteString
+            return AbsDownloader.itemDownloadFolder(path: path)
         } else {
             return nil
         }
+    }
+    
+    var coverContentUrl: String? {
+        return self.coverUrl?.absoluteString
     }
     
     var isBook: Bool { self.mediaType == "book" }
@@ -165,9 +169,14 @@ extension LocalLibraryItem {
         self.media?.chapters.forEach { chapter in chapters.append(Chapter.detachCopy(of: chapter)!) }
         let authorName = mediaMetadata?.authorDisplayName
         
+        var duration = getDuration()
+        var displayTitle = mediaMetadata?.title
+
         let audioTracks = List<AudioTrack>()
         if let episode = episode, let track = episode.audioTrack {
             audioTracks.append(AudioTrack.detachCopy(of: track)!)
+            duration = track.duration
+            displayTitle = episode.title
         } else if let tracks = self.media?.tracks {
             tracks.forEach { t in audioTracks.append(AudioTrack.detachCopy(of: t)!) }
         }
@@ -181,10 +190,10 @@ extension LocalLibraryItem {
             mediaType: self.mediaType,
             mediaMetadata: mediaMetadata,
             chapters: chapters,
-            displayTitle: mediaMetadata?.title,
+            displayTitle: displayTitle,
             displayAuthor: authorName,
             coverPath: self.coverContentUrl,
-            duration: self.getDuration(),
+            duration: duration,
             playMethod: PlayMethod.local.rawValue,
             startedAt: dateNow,
             updatedAt: dateNow,

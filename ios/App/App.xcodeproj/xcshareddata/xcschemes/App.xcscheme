@@ -15,8 +15,8 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "504EC3031FED79650016851F"
-               BuildableName = "App.app"
-               BlueprintName = "App"
+               BuildableName = "Audiobookshelf.app"
+               BlueprintName = "Audiobookshelf"
                ReferencedContainer = "container:App.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -28,6 +28,17 @@
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES">
       <Testables>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "E9E8813928DA5DE500D750C1"
+               BuildableName = "AudiobookshelfUnitTests.xctest"
+               BlueprintName = "AudiobookshelfUnitTests"
+               ReferencedContainer = "container:App.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction
@@ -45,8 +56,8 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "504EC3031FED79650016851F"
-            BuildableName = "App.app"
-            BlueprintName = "App"
+            BuildableName = "Audiobookshelf.app"
+            BlueprintName = "Audiobookshelf"
             ReferencedContainer = "container:App.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -62,8 +73,8 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "504EC3031FED79650016851F"
-            BuildableName = "App.app"
-            BlueprintName = "App"
+            BuildableName = "Audiobookshelf.app"
+            BlueprintName = "Audiobookshelf"
             ReferencedContainer = "container:App.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>

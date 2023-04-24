@@ -115,10 +115,10 @@ export default {
         })
       } else {
         items.push({
-        icon: 'download',
-        iconOutlined: false,
-        text: 'Downloads',
-        to: '/downloads'
+          icon: 'download',
+          iconOutlined: false,
+          text: 'Downloads',
+          to: '/downloads'
         })
       }
       items.push({
@@ -137,6 +137,7 @@ export default {
       this.show = false
     },
     async logout() {
+      await this.$hapticsImpact()
       if (this.user) {
         await this.$axios.$post('/logout').catch((error) => {
           console.error(error)

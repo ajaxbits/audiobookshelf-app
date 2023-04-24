@@ -1,14 +1,21 @@
 package com.audiobookshelf.app.data
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.ImageDecoder
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.MediaStore
 import android.support.v4.media.MediaDescriptionCompat
 import android.util.Log
 import androidx.media.utils.MediaConstants
+import com.audiobookshelf.app.BuildConfig
 import com.audiobookshelf.app.R
 import com.audiobookshelf.app.device.DeviceManager
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
+import com.audiobookshelf.app.player.PLAYMETHOD_LOCAL
 import java.util.*
 
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -40,7 +47,7 @@ class LocalLibraryItem(
 
   @JsonIgnore
   fun getCoverUri(): Uri {
-    return if (coverContentUrl != null) Uri.parse(coverContentUrl) else Uri.parse("android.resource://com.audiobookshelf.app/" + R.drawable.icon)
+    return if (coverContentUrl != null) Uri.parse(coverContentUrl) else Uri.parse("android.resource://${BuildConfig.APPLICATION_ID}/" + R.drawable.icon)
   }
 
   @JsonIgnore
@@ -76,18 +83,21 @@ class LocalLibraryItem(
     val mediaProgress = DeviceManager.dbManager.getLocalMediaProgress(mediaProgressId)
     val currentTime = mediaProgress?.currentTime ?: 0.0
 
-    // TODO: Clean up add mediaType methods for displayTitle and displayAuthor
+
     val mediaMetadata = media.metadata
     val chapters = if (mediaType == "book") (media as Book).chapters else mutableListOf()
     var audioTracks = media.getAudioTracks() as MutableList<AudioTrack>
     val authorName = mediaMetadata.getAuthorDisplayName()
+    val displayTitle = episode?.title ?: mediaMetadata.title
+    var duration = getDuration()
     if (episode != null) { // Get podcast episode audio track
       episode.audioTrack?.let { at -> mutableListOf(at) }?.let { tracks -> audioTracks = tracks }
+      duration = episode.audioTrack?.duration ?: 0.0
       Log.d("LocalLibraryItem", "getPlaybackSession: Got podcast episode audio track ${audioTracks.size}")
     }
 
     val dateNow = System.currentTimeMillis()
-    return PlaybackSession(sessionId,serverUserId,libraryItemId,episode?.serverEpisodeId, mediaType, mediaMetadata, chapters ?: mutableListOf(), mediaMetadata.title, authorName,null,getDuration(),PLAYMETHOD_LOCAL,dateNow,0L,0L, audioTracks,currentTime,null,this,localEpisodeId,serverConnectionConfigId, serverAddress, "exo-player")
+    return PlaybackSession(sessionId,serverUserId,libraryItemId,episode?.serverEpisodeId, mediaType, mediaMetadata, chapters ?: mutableListOf(), displayTitle, authorName,null,duration,PLAYMETHOD_LOCAL,dateNow,0L,0L, audioTracks,currentTime,null,this,localEpisodeId,serverConnectionConfigId, serverAddress, "exo-player")
   }
 
   @JsonIgnore
@@ -96,10 +106,26 @@ class LocalLibraryItem(
   }
 
   @JsonIgnore
-  override fun getMediaDescription(progress:MediaProgressWrapper?): MediaDescriptionCompat {
+  override fun getMediaDescription(progress:MediaProgressWrapper?, ctx:Context?): MediaDescriptionCompat {
     val coverUri = getCoverUri()
 
+    var bitmap:Bitmap? = null
+    if (coverContentUrl != null) {
+      ctx?.let {
+        bitmap = if (Build.VERSION.SDK_INT < 28) {
+          MediaStore.Images.Media.getBitmap(it.contentResolver, coverUri)
+        } else {
+          val source: ImageDecoder.Source = ImageDecoder.createSource(it.contentResolver, coverUri)
+          ImageDecoder.decodeBitmap(source)
+        }
+      }
+    }
+
     val extras = Bundle()
+    extras.putLong(
+      MediaDescriptionCompat.EXTRA_DOWNLOAD_STATUS,
+      MediaDescriptionCompat.STATUS_DOWNLOADED
+    )
     if (progress != null) {
       if (progress.isFinished) {
         extras.putInt(
@@ -122,12 +148,17 @@ class LocalLibraryItem(
       )
     }
 
-    return MediaDescriptionCompat.Builder()
+    val mediaDescriptionBuilder = MediaDescriptionCompat.Builder()
       .setMediaId(id)
       .setTitle(title)
       .setIconUri(coverUri)
       .setSubtitle(authorName)
       .setExtras(extras)
-      .build()
+
+    bitmap?.let {
+      mediaDescriptionBuilder.setIconBitmap(bitmap)
+    }
+
+    return mediaDescriptionBuilder.build()
   }
 }

@@ -15,31 +15,24 @@ class PlayerHandler {
         guard let session = Database.shared.getPlaybackSession(id: sessionId) else { return }
         
         // Clean up the existing player
-        if player != nil {
-            player?.destroy()
-            player = nil
-        }
+        resetPlayer()
         
         // Cleanup and sync old sessions
         cleanupOldSessions(currentSessionId: sessionId)
         Task { await PlayerProgress.shared.syncToServer() }
         
         // Set now playing info
-        NowPlayingInfo.shared.setSessionMetadata(metadata: NowPlayingMetadata(id: session.id, itemId: session.libraryItemId!, artworkUrl: session.coverPath, title: session.displayTitle ?? "Unknown title", author: session.displayAuthor, series: nil))
+        NowPlayingInfo.shared.setSessionMetadata(metadata: NowPlayingMetadata(id: session.id, itemId: session.libraryItemId!, title: session.displayTitle ?? "Unknown title", author: session.displayAuthor, series: nil))
         
         // Create the audio player
         player = AudioPlayer(sessionId: sessionId, playWhenReady: playWhenReady, playbackRate: playbackRate)
     }
     
-    public static func stopPlayback() {
+    public static func stopPlayback(currentSessionId: String? = nil) {
         // Pause playback first, so we can sync our current progress
         player?.pause()
-        
-        player?.destroy()
-        player = nil
-        
-        cleanupOldSessions(currentSessionId: nil)
-        
+        resetPlayer()
+        cleanupOldSessions(currentSessionId: currentSessionId)
         NowPlayingInfo.shared.reset()
     }
     
@@ -52,13 +45,17 @@ class PlayerHandler {
             if paused {
                 self.player?.pause()
             } else {
-                self.player?.play()
+                self.player?.play(allowSeekBack: true)
             }
         }
     }
     
     public static func getCurrentTime() -> Double? {
         self.player?.getCurrentTime()
+    }
+    
+    public static func getPlayWhenReady() -> Bool {
+        self.player?.playWhenReady ?? false
     }
     
     public static func setPlaybackSpeed(speed: Float) {
@@ -95,9 +92,8 @@ class PlayerHandler {
     
     public static func getPlaybackSession() -> PlaybackSession? {
         guard let player = player else { return nil }
-        guard player.isInitialized() else { return nil }
-        
-        return Database.shared.getPlaybackSession(id: player.getPlaybackSessionId())
+
+        return player.getPlaybackSession()
     }
     
     public static func seekForward(amount: Double) {
@@ -125,16 +121,15 @@ class PlayerHandler {
         player.seek(amount, from: "handler")
     }
     
-    public static func getMetdata() -> [String: Any]? {
+    public static func getMetdata() -> PlaybackMetadata? {
         guard let player = player else { return nil }
         guard player.isInitialized() else { return nil }
-        
-        return [
-            "duration": player.getDuration(),
-            "currentTime": player.getCurrentTime(),
-            "playerState": !paused,
-            "currentRate": player.rate,
-        ]
+
+        return PlaybackMetadata(
+            duration: player.getDuration() ?? 0,
+            currentTime: player.getCurrentTime() ?? 0,
+            playerState: player.getPlayerState()
+        )
     }
     
     // MARK: - Helper logic
@@ -156,5 +151,10 @@ class PlayerHandler {
             debugPrint("Failed to cleanup sessions")
             debugPrint(error)
         }
+    }
+    
+    private static func resetPlayer() {
+        player?.destroy()
+        player = nil
     }
 }

@@ -32,7 +32,11 @@ export const state = () => ({
       icon: 'replay_30',
       value: 30
     }
-  ]
+  ],
+  libraryIcons: ['database', 'audiobookshelf', 'books-1', 'books-2', 'book-1', 'microphone-1', 'microphone-3', 'radio', 'podcast', 'rss', 'headphones', 'music', 'file-picture', 'rocket', 'power', 'star', 'heart'],
+  selectedPlaylistItems: [],
+  showPlaylistsAddCreateModal: false,
+  hapticFeedback: 'LIGHT'
 })
 
 export const getters = {
@@ -42,26 +46,36 @@ export const getters = {
       return i.libraryItemId == libraryItemId
     })
   },
-  getLibraryItemCoverSrc: (state, getters, rootState, rootGetters) => (libraryItem, placeholder = '/book_placeholder.jpg') => {
+  getLibraryItemCoverSrc: (state, getters, rootState, rootGetters) => (libraryItem, placeholder, raw = false) => {
     if (!libraryItem) return placeholder
-    var media = libraryItem.media
+    const media = libraryItem.media
     if (!media || !media.coverPath || media.coverPath === placeholder) return placeholder
 
     // Absolute URL covers (should no longer be used)
     if (media.coverPath.startsWith('http:') || media.coverPath.startsWith('https:')) return media.coverPath
 
-    var userToken = rootGetters['user/getToken']
-    var serverAddress = rootGetters['user/getServerAddress']
+    const userToken = rootGetters['user/getToken']
+    const serverAddress = rootGetters['user/getServerAddress']
     if (!userToken || !serverAddress) return placeholder
 
-    var lastUpdate = libraryItem.updatedAt || Date.now()
+    const lastUpdate = libraryItem.updatedAt || Date.now()
 
     if (process.env.NODE_ENV !== 'production') { // Testing
       // return `http://localhost:3333/api/items/${libraryItem.id}/cover?token=${userToken}&ts=${lastUpdate}`
     }
 
-    var url = new URL(`/api/items/${libraryItem.id}/cover`, serverAddress)
-    return `${url}?token=${userToken}&ts=${lastUpdate}`
+    const url = new URL(`/api/items/${libraryItem.id}/cover`, serverAddress)
+    return `${url}?token=${userToken}&ts=${lastUpdate}${raw ? '&raw=1' : ''}`
+  },
+  getLibraryItemCoverSrcById: (state, getters, rootState, rootGetters) => (libraryItemId, placeholder = null) => {
+    if (!placeholder) placeholder = `${rootState.routerBasePath}/book_placeholder.jpg`
+    if (!libraryItemId) return placeholder
+    const userToken = rootGetters['user/getToken']
+    const serverAddress = rootGetters['user/getServerAddress']
+    if (!userToken || !serverAddress) return placeholder
+
+    const url = new URL(`/api/items/${libraryItemId}/cover`, serverAddress)
+    return `${url}?token=${userToken}`
   },
   getLocalMediaProgressById: (state) => (localLibraryItemId, episodeId = null) => {
     return state.localMediaProgress.find(lmp => {
@@ -87,8 +101,7 @@ export const getters = {
 
 export const actions = {
   async loadLocalMediaProgress({ state, commit }) {
-    var mediaProgress = await this.$db.getAllLocalMediaProgress()
-    console.log('Got all local media progress', JSON.stringify(mediaProgress))
+    const mediaProgress = await this.$db.getAllLocalMediaProgress()
     commit('setLocalMediaProgress', mediaProgress)
   }
 }
@@ -103,6 +116,31 @@ export const mutations = {
       state.itemDownloads.splice(index, 1, downloadItem)
     } else {
       state.itemDownloads.push(downloadItem)
+    }
+  },
+  updateDownloadItemPart(state, downloadItemPart) {
+    const downloadItem = state.itemDownloads.find(i => i.id == downloadItemPart.downloadItemId)
+    if (!downloadItem) {
+      console.error('updateDownloadItemPart: Download item not found for itemPart', JSON.stringify(downloadItemPart))
+      return
+    }
+
+    let totalBytes = 0
+    let totalBytesDownloaded = 0
+    downloadItem.downloadItemParts = downloadItem.downloadItemParts.map(dip => {
+      let newDip = dip.id == downloadItemPart.id ? downloadItemPart : dip
+
+      totalBytes += newDip.completed ? Number(newDip.bytesDownloaded) : Number(newDip.fileSize)
+      totalBytesDownloaded += Number(newDip.bytesDownloaded)
+
+      return newDip
+    })
+
+    if (totalBytes > 0) {
+      downloadItem.itemProgress = Math.min(1, totalBytesDownloaded / totalBytes)
+      console.log(`updateDownloadItemPart: filename=${downloadItemPart.filename}, totalBytes=${totalBytes}, downloaded=${totalBytesDownloaded}, itemProgress=${downloadItem.itemProgress}`)
+    } else {
+      downloadItem.itemProgress = 0
     }
   },
   removeItemDownload(state, id) {
@@ -123,10 +161,8 @@ export const mutations = {
     }
     var index = state.localMediaProgress.findIndex(lmp => lmp.id == prog.id)
     if (index >= 0) {
-      console.log('UpdateLocalMediaProgress updating', prog.id, prog.progress)
       state.localMediaProgress.splice(index, 1, prog)
     } else {
-      console.log('updateLocalMediaProgress inserting new progress', prog.id, prog.progress)
       state.localMediaProgress.push(prog)
     }
   },
@@ -138,5 +174,14 @@ export const mutations = {
   },
   setLastSearch(state, val) {
     state.lastSearch = val
+  },
+  setSelectedPlaylistItems(state, items) {
+    state.selectedPlaylistItems = items
+  },
+  setShowPlaylistsAddCreateModal(state, val) {
+    state.showPlaylistsAddCreateModal = val
+  },
+  setHapticFeedback(state, val) {
+    state.hapticFeedback = val || 'LIGHT'
   }
 }

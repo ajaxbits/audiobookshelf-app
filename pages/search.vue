@@ -1,7 +1,7 @@
 <template>
   <div class="w-full h-full">
     <div class="px-4 py-6">
-      <ui-text-input ref="input" v-model="search" @input="updateSearch" borderless placeholder="Search" bg="white bg-opacity-5" rounded="md" prepend-icon="search" text-size="base" class="w-full text-lg" />
+      <ui-text-input ref="input" v-model="search" @input="updateSearch" borderless placeholder="Search" bg="white bg-opacity-10" rounded="md" prepend-icon="search" text-size="base" clearable class="w-full text-lg" />
     </div>
     <div class="w-full overflow-x-hidden overflow-y-auto search-content px-4" @click.stop>
       <div v-show="isFetching" class="w-full py-8 flex justify-center">
@@ -68,7 +68,7 @@ export default {
       return this.$store.state.libraries.currentLibraryId
     },
     bookCoverAspectRatio() {
-      return this.$store.getters['getBookCoverAspectRatio']
+      return this.$store.getters['libraries/getBookCoverAspectRatio']
     },
     totalResults() {
       return this.bookResults.length + this.seriesResults.length + this.authorResults.length + this.podcastResults.length
@@ -89,9 +89,9 @@ export default {
         return
       }
       this.isFetching = true
-      var results = await this.$axios.$get(`/api/libraries/${this.currentLibraryId}/search?q=${value}&limit=5`).catch((error) => {
+      const results = await this.$axios.$get(`/api/libraries/${this.currentLibraryId}/search?q=${value}&limit=5`).catch((error) => {
         console.error('Search error', error)
-        return []
+        return null
       })
       if (value !== this.lastSearch) {
         console.log(`runSearch: New search was made for ${this.lastSearch} - results are from ${value}`)

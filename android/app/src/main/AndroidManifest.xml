@@ -2,7 +2,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:dist="http://schemas.android.com/apk/distribution"
     xmlns:tools="http://schemas.android.com/tools"
-    package="com.audiobookshelf.app"
     android:installLocation="preferExternal" >
 
     <!-- Permissions -->
@@ -22,18 +21,21 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/AppTheme"
-        android:usesCleartextTraffic="true" >
-<!--        <receiver-->
-<!--            android:name=".NewAppWidget"-->
-<!--            android:exported="true" >-->
-<!--            <intent-filter>-->
-<!--                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />-->
-<!--            </intent-filter>-->
+        android:usesCleartextTraffic="true"
+        android:largeHeap="true" >
 
-<!--            <meta-data-->
-<!--                android:name="android.appwidget.provider"-->
-<!--                android:resource="@xml/new_app_widget_info" />-->
-<!--        </receiver>-->
+        <!-- Android app widget -->
+        <receiver
+          android:name="MediaPlayerWidget"
+          android:exported="false">
+          <intent-filter>
+            <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+          </intent-filter>
+
+          <meta-data
+            android:name="android.appwidget.provider"
+            android:resource="@xml/media_player_widget_info" />
+        </receiver>
 
         <!-- Used by Android Auto -->
         <meta-data
@@ -75,7 +77,7 @@
             </intent-filter>
         </activity>
 
-        <receiver android:name="androidx.media.session.MediaButtonReceiver" >
+        <receiver android:name="androidx.media.session.MediaButtonReceiver" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
@@ -84,7 +86,8 @@
         <service
             android:name=".player.PlayerNotificationService"
             android:enabled="true"
-            android:exported="true" >
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback">
             <intent-filter>
                 <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>

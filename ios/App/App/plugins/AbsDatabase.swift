@@ -28,6 +28,8 @@ extension String {
 
 @objc(AbsDatabase)
 public class AbsDatabase: CAPPlugin {
+    private let logger = AppLogger(category: "AbsDatabase")
+    
     @objc func setCurrentServerConnectionConfig(_ call: CAPPluginCall) {
         var id = call.getString("id")
         let address = call.getString("address", "")
@@ -82,7 +84,7 @@ public class AbsDatabase: CAPPlugin {
             let items = Database.shared.getLocalLibraryItems()
             call.resolve([ "value": try items.asDictionaryArray()])
         } catch(let exception) {
-            NSLog("error while readling local library items")
+            logger.error("error while readling local library items")
             debugPrint(exception)
             call.resolve()
         }
@@ -98,7 +100,7 @@ public class AbsDatabase: CAPPlugin {
                     call.resolve()
             }
         } catch(let exception) {
-            NSLog("error while readling local library items")
+            logger.error("error while readling local library items")
             debugPrint(exception)
             call.resolve()
         }
@@ -114,7 +116,7 @@ public class AbsDatabase: CAPPlugin {
                     call.resolve()
             }
         } catch(let exception) {
-            NSLog("error while readling local library items")
+            logger.error("error while readling local library items")
             debugPrint(exception)
             call.resolve()
         }
@@ -128,7 +130,7 @@ public class AbsDatabase: CAPPlugin {
         do {
             call.resolve([ "value": try Database.shared.getAllLocalMediaProgress().asDictionaryArray() ])
         } catch {
-            NSLog("Error while loading local media progress")
+            logger.error("Error while loading local media progress")
             debugPrint(error)
             call.resolve(["value": []])
         }
@@ -178,7 +180,7 @@ public class AbsDatabase: CAPPlugin {
                 return
             }
             
-            NSLog("syncServerMediaProgressWithLocalMediaProgress: Saving local media progress")
+            logger.log("syncServerMediaProgressWithLocalMediaProgress: Saving local media progress")
             try localMediaProgress.updateFromServerMediaProgress(serverMediaProgress)
             
             call.resolve(try localMediaProgress.asDictionary())
@@ -194,7 +196,7 @@ public class AbsDatabase: CAPPlugin {
         let localMediaProgressId = call.getString("localMediaProgressId")
         let isFinished = call.getBool("isFinished", false)
         
-        NSLog("updateLocalMediaProgressFinished \(localMediaProgressId ?? "Unknown") | Is Finished: \(isFinished)")
+        logger.log("updateLocalMediaProgressFinished \(localMediaProgressId ?? "Unknown") | Is Finished: \(isFinished)")
         
         do {
             let localMediaProgress = try LocalMediaProgress.fetchOrCreateLocalMediaProgress(localMediaProgressId: localMediaProgressId, localLibraryItemId: localLibraryItemId, localEpisodeId: localEpisodeId)
@@ -234,11 +236,15 @@ public class AbsDatabase: CAPPlugin {
         let enableAltView = call.getBool("enableAltView") ?? false
         let jumpBackwardsTime = call.getInt("jumpBackwardsTime") ?? 10
         let jumpForwardTime = call.getInt("jumpForwardTime") ?? 10
+        let lockOrientation = call.getString("lockOrientation") ?? "NONE"
+        let hapticFeedback = call.getString("hapticFeedback") ?? "LIGHT"
         let settings = DeviceSettings()
         settings.disableAutoRewind = disableAutoRewind
         settings.enableAltView = enableAltView
         settings.jumpBackwardsTime = jumpBackwardsTime
         settings.jumpForwardTime = jumpForwardTime
+        settings.lockOrientation = lockOrientation
+        settings.hapticFeedback = hapticFeedback
         
         Database.shared.setDeviceSettings(deviceSettings: settings)
         

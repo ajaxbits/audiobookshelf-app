@@ -10,15 +10,20 @@
       <p class="truncate" :style="{ fontSize: 0.9 * sizeMultiplier + 'rem' }">
         {{ displayTitle }}
       </p>
-      <p class="truncate text-gray-400" :style="{ fontSize: 0.8 * sizeMultiplier + 'rem' }">{{ displayAuthor || '&nbsp;' }}</p>
+      <p class="truncate text-gray-400" :style="{ fontSize: 0.8 * sizeMultiplier + 'rem' }">{{ displayLineTwo || '&nbsp;' }}</p>
       <p v-if="displaySortLine" class="truncate text-gray-400" :style="{ fontSize: 0.8 * sizeMultiplier + 'rem' }">{{ displaySortLine }}</p>
     </div>
 
-    <div v-if="booksInSeries" class="absolute z-20 top-1.5 right-1.5 rounded-md leading-3 text-sm p-1 font-semibold text-white flex items-center justify-center" style="background-color: #cd9d49dd">{{ booksInSeries }}</div>
+    <div v-if="seriesSequenceList" class="absolute rounded-lg bg-black bg-opacity-90 box-shadow-md z-20 text-right" :style="{ top: 0.375 * sizeMultiplier + 'rem', right: 0.375 * sizeMultiplier + 'rem', padding: `${0.1 * sizeMultiplier}rem ${0.25 * sizeMultiplier}rem` }" style="background-color: #78350f">
+      <p :style="{ fontSize: sizeMultiplier * 0.8 + 'rem' }">#{{ seriesSequenceList }}</p>
+    </div>
+    <div v-else-if="booksInSeries" class="absolute rounded-lg bg-black bg-opacity-90 box-shadow-md z-20" :style="{ top: 0.375 * sizeMultiplier + 'rem', right: 0.375 * sizeMultiplier + 'rem', padding: `${0.1 * sizeMultiplier}rem ${0.25 * sizeMultiplier}rem` }" style="background-color: #cd9d49dd">
+      <p :style="{ fontSize: sizeMultiplier * 0.8 + 'rem' }">{{ booksInSeries }}</p>
+    </div>
 
     <div class="w-full h-full absolute top-0 left-0 rounded overflow-hidden z-10">
       <div v-show="libraryItem && !imageReady" class="absolute top-0 left-0 w-full h-full flex items-center justify-center" :style="{ padding: sizeMultiplier * 0.5 + 'rem' }">
-        <p :style="{ fontSize: sizeMultiplier * 0.8 + 'rem' }" class="font-book text-gray-300 text-center">{{ title }}</p>
+        <p :style="{ fontSize: sizeMultiplier * 0.8 + 'rem' }" class="text-gray-300 text-center">{{ title }}</p>
       </div>
 
       <img v-show="libraryItem" ref="cover" :src="bookCoverSrc" class="w-full h-full transition-opacity duration-300" :class="showCoverBg ? 'object-contain' : 'object-fill'" @load="imageLoaded" :style="{ opacity: imageReady ? 1 : 0 }" />
@@ -26,16 +31,16 @@
       <!-- Placeholder Cover Title & Author -->
       <div v-if="!hasCover" class="absolute top-0 left-0 right-0 bottom-0 w-full h-full flex items-center justify-center" :style="{ padding: placeholderCoverPadding + 'rem' }">
         <div>
-          <p class="text-center font-book" style="color: rgb(247 223 187)" :style="{ fontSize: titleFontSize + 'rem' }">{{ titleCleaned }}</p>
+          <p class="text-center" style="color: rgb(247 223 187)" :style="{ fontSize: titleFontSize + 'rem' }">{{ titleCleaned }}</p>
         </div>
       </div>
       <div v-if="!hasCover" class="absolute left-0 right-0 w-full flex items-center justify-center" :style="{ padding: placeholderCoverPadding + 'rem', bottom: authorBottom + 'rem' }">
-        <p class="text-center font-book" style="color: rgb(247 223 187); opacity: 0.75" :style="{ fontSize: authorFontSize + 'rem' }">{{ authorCleaned }}</p>
+        <p class="text-center" style="color: rgb(247 223 187); opacity: 0.75" :style="{ fontSize: authorFontSize + 'rem' }">{{ authorCleaned }}</p>
       </div>
     </div>
 
     <!-- Play/pause button for podcast episode -->
-    <div v-if="recentEpisode" class="absolute z-10 top-0 left-0 bottom-0 right-0 m-auto flex items-center justify-center w-12 h-12 rounded-full bg-white bg-opacity-70">
+    <div v-if="recentEpisode" class="absolute z-10 top-0 left-0 bottom-0 right-0 m-auto flex items-center justify-center w-12 h-12 rounded-full bg-white bg-opacity-70" @click.stop="playEpisode">
       <span class="material-icons text-6xl text-black text-opacity-80">{{ streamIsPlaying ? 'pause_circle' : 'play_circle_filled' }}</span>
     </div>
 
@@ -226,22 +231,36 @@ export default {
       // Only added to item object when collapseSeries is enabled
       return this.collapsedSeries ? this.collapsedSeries.numBooks : 0
     },
-    displayTitle() {
-      if (this.orderBy === 'media.metadata.title' && this.sortingIgnorePrefix && this.title.toLowerCase().startsWith('the ')) {
-        return this.title.substr(4) + ', The'
-      }
-      return this.title
+    seriesSequenceList() {
+      return this.collapsedSeries ? this.collapsedSeries.seriesSequenceList : null
     },
-    displayAuthor() {
+    libraryItemIdsInSeries() {
+      // Only added to item object when collapseSeries is enabled
+      return this.collapsedSeries ? this.collapsedSeries.libraryItemIds || [] : []
+    },
+    displayTitle() {
+      if (this.recentEpisode) return this.recentEpisode.title
+
+      const ignorePrefix = this.orderBy === 'media.metadata.title' && this.sortingIgnorePrefix
+      if (this.collapsedSeries) return ignorePrefix ? this.collapsedSeries.nameIgnorePrefix : this.collapsedSeries.name
+      return ignorePrefix ? this.mediaMetadata.titleIgnorePrefix : this.title
+    },
+    displayLineTwo() {
+      if (this.recentEpisode) return this.title
+      if (this.collapsedSeries) return ''
+      if (this.isPodcast) return this.author
+
       if (this.orderBy === 'media.metadata.authorNameLF') return this.authorLF
       return this.author
     },
     displaySortLine() {
+      if (this.collapsedSeries) return null
       if (this.orderBy === 'mtimeMs') return 'Modified ' + this.$formatDate(this._libraryItem.mtimeMs)
       if (this.orderBy === 'birthtimeMs') return 'Born ' + this.$formatDate(this._libraryItem.birthtimeMs)
       if (this.orderBy === 'addedAt') return 'Added ' + this.$formatDate(this._libraryItem.addedAt)
       if (this.orderBy === 'media.duration') return 'Duration: ' + this.$elapsedPrettyExtended(this.media.duration, false)
       if (this.orderBy === 'size') return 'Size: ' + this.$bytesPretty(this._libraryItem.size)
+      if (this.orderBy === 'media.numTracks') return `${this.numEpisodes} Episodes`
       return null
     },
     episodeProgress() {
@@ -255,8 +274,13 @@ export default {
       if (this.isLocal) return this.store.getters['globals/getLocalMediaProgressById'](this.libraryItemId)
       return this.store.getters['user/getUserMediaProgress'](this.libraryItemId)
     },
+    useEBookProgress() {
+      if (!this.userProgress || this.userProgress.progress) return false
+      return this.userProgress.ebookProgress > 0
+    },
     userProgressPercent() {
-      return this.userProgress ? this.userProgress.progress || 0 : 0
+      if (this.useEBookProgress) return Math.max(Math.min(1, this.userProgress.ebookProgress), 0)
+      return this.userProgress ? Math.max(Math.min(1, this.userProgress.progress), 0) || 0 : 0
     },
     itemIsFinished() {
       return this.userProgress ? !!this.userProgress.isFinished : false
@@ -318,9 +342,6 @@ export default {
     },
     userIsRoot() {
       return this.store.getters['user/getIsRoot']
-    },
-    _socket() {
-      return this.$root.socket || this.$nuxt.$root.socket
     },
     titleFontSize() {
       return 0.75 * this.sizeMultiplier
@@ -404,37 +425,40 @@ export default {
       // Server books may have a local library item
       this.localLibraryItem = localLibraryItem
     },
-    clickCard(e) {
+    async playEpisode() {
+      await this.$hapticsImpact()
+      const eventBus = this.$eventBus || this.$nuxt.$eventBus
+      if (this.streamIsPlaying) {
+        eventBus.$emit('pause-item')
+        return
+      }
+
+      if (this.localLibraryItem) {
+        const localEpisode = this.localLibraryItem.media.episodes.find((ep) => ep.serverEpisodeId === this.recentEpisode.id)
+        if (localEpisode) {
+          // Play episode locally
+          eventBus.$emit('play-item', {
+            libraryItemId: this.localLibraryItemId,
+            episodeId: localEpisode.id,
+            serverLibraryItemId: this.libraryItemId,
+            serverEpisodeId: this.recentEpisode.id
+          })
+          return
+        }
+      }
+
+      eventBus.$emit('play-item', { libraryItemId: this.libraryItemId, episodeId: this.recentEpisode.id })
+    },
+    async clickCard(e) {
       if (this.isSelectionMode) {
         e.stopPropagation()
         e.preventDefault()
         this.selectBtnClick()
-      } else if (this.recentEpisode) {
-        var eventBus = this.$eventBus || this.$nuxt.$eventBus
-        if (this.streamIsPlaying) {
-          eventBus.$emit('pause-item')
-          return
-        }
-
-        if (this.localLibraryItem) {
-          const localEpisode = this.localLibraryItem.media.episodes.find((ep) => ep.serverEpisodeId === this.recentEpisode.id)
-          if (localEpisode) {
-            // Play episode locally
-            eventBus.$emit('play-item', {
-              libraryItemId: this.localLibraryItemId,
-              episodeId: localEpisode.id,
-              serverLibraryItemId: this.libraryItemId,
-              serverEpisodeId: this.recentEpisode.id
-            })
-            return
-          }
-        }
-
-        eventBus.$emit('play-item', { libraryItemId: this.libraryItemId, episodeId: this.recentEpisode.id })
       } else {
-        var router = this.$router || this.$nuxt.$router
+        const router = this.$router || this.$nuxt.$router
         if (router) {
-          if (this.collapsedSeries) router.push(`/library/${this.libraryId}/series/${this.collapsedSeries.id}`)
+          if (this.recentEpisode) router.push(`/item/${this.libraryItemId}/${this.recentEpisode.id}`)
+          else if (this.collapsedSeries) router.push(`/bookshelf/series/${this.collapsedSeries.id}`)
           else router.push(`/item/${this.libraryItemId}`)
         }
       }
@@ -528,9 +552,9 @@ export default {
       this.imageReady = true
 
       if (this.$refs.cover && this.bookCoverSrc !== this.placeholderUrl) {
-        var { naturalWidth, naturalHeight } = this.$refs.cover
-        var aspectRatio = naturalHeight / naturalWidth
-        var arDiff = Math.abs(aspectRatio - this.bookCoverAspectRatio)
+        const { naturalWidth, naturalHeight } = this.$refs.cover
+        const aspectRatio = naturalHeight / naturalWidth
+        const arDiff = Math.abs(aspectRatio - this.bookCoverAspectRatio)
 
         // If image aspect ratio is <= 1.45 or >= 1.75 then use cover bg, otherwise stretch to fit
         if (arDiff > 0.15) {
